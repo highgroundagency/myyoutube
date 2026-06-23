@@ -30,7 +30,7 @@ function playerErrorMessage(code: number | null): string {
       return 'This video was removed or made private.';
     case 101:
     case 150:
-      return 'The owner does not allow this video to play outside YouTube.';
+      return 'This channel disabled playback outside YouTube. It cannot be embedded here.';
     default:
       return 'This video could not be played right now.';
   }
@@ -206,13 +206,23 @@ function PlayerArea({
         title="Not available in your region"
         message="The owner has restricted this video so it cannot play where you are."
       >
-        <button
-          type="button"
-          onClick={onMarkSeenAndBack}
-          className="rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-surface-2"
-        >
-          Mark as seen and go back
-        </button>
+        <div className="flex flex-wrap justify-center gap-3">
+          <a
+            href={`https://www.youtube.com/watch?v=${video.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600"
+          >
+            Open on YouTube
+          </a>
+          <button
+            type="button"
+            onClick={onMarkSeenAndBack}
+            className="rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-surface-2"
+          >
+            Mark as seen and go back
+          </button>
+        </div>
       </Overlay>
     );
   }
@@ -230,7 +240,15 @@ function PlayerArea({
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center text-white">
           <p className="max-w-sm text-sm">{playerErrorMessage(errorCode)}</p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
+            <a
+              href={`https://www.youtube.com/watch?v=${video.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-white/90"
+            >
+              Open on YouTube
+            </a>
             <button
               type="button"
               onClick={onReload}
@@ -241,9 +259,9 @@ function PlayerArea({
             <button
               type="button"
               onClick={onMarkSeenAndBack}
-              className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-white/90"
+              className="rounded-lg border border-white/30 px-4 py-2 text-sm font-medium hover:bg-white/10"
             >
-              Mark as seen and go back
+              Mark seen, go back
             </button>
           </div>
         </div>
