@@ -2,7 +2,6 @@ import { Link, NavLink } from 'react-router-dom';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { SearchBar } from './SearchBar';
-import { AccountButton } from './AccountButton';
 
 type TopBarProps = {
   onQueryChange: (query: string) => void;
@@ -26,7 +25,6 @@ export function TopBar({ onQueryChange }: TopBarProps) {
           <HeaderLink to="/history" label="History" />
           <StatsLink />
           <ThemeToggle />
-          <AccountButton />
         </nav>
       </div>
 

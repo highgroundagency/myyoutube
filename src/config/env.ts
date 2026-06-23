@@ -15,12 +15,6 @@ function readBool(value: string | undefined, fallback: boolean): boolean {
 /** When true, hooks read fixtures instead of calling /api. Set via VITE_MOCK_MODE. */
 export const MOCK_MODE = readBool(import.meta.env.VITE_MOCK_MODE, false);
 
-export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
-export const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
-
-/** Sync is only possible when both Supabase values are present. */
-export const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-
 /**
  * Embed host for the IFrame player. Defaults to the Premium friendly youtube.com.
  * Switchable per device via VITE_EMBED_HOST (section 17).

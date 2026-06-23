@@ -10,7 +10,6 @@ const Watch = lazy(() => import('./pages/Watch').then((m) => ({ default: m.Watch
 const Stats = lazy(() => import('./pages/Stats').then((m) => ({ default: m.Stats })));
 const Channel = lazy(() => import('./pages/Channel').then((m) => ({ default: m.Channel })));
 const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
-const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })));
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 
 function RouteFallback() {
@@ -25,9 +24,6 @@ export function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes>
-        {/* Login is full screen, outside the app shell. */}
-        <Route path="/login" element={<Login />} />
-
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/watch/:videoId" element={<Watch />} />

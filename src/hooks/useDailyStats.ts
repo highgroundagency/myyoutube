@@ -1,11 +1,7 @@
-import { useSyncExternalStore } from 'react';
-import { dailyStatsStore } from '../lib/stats/dailyStatsStore';
+import { usePersistence } from '../providers/persistence';
+import type { DailyStats } from '../lib/persistence/types';
 
-/** Reactive access to the local daily stats store. */
-export function useDailyStats() {
-  return useSyncExternalStore(
-    dailyStatsStore.subscribe,
-    dailyStatsStore.getSnapshot,
-    dailyStatsStore.getSnapshot,
-  );
+/** Reactive access to the local daily stats. */
+export function useDailyStats(): DailyStats {
+  return usePersistence().dailyStats;
 }

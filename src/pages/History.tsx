@@ -5,7 +5,7 @@ import { EmptyState } from '../components/EmptyState';
 import { Badge } from '../components/Badge';
 import { PLACEHOLDER_THUMBNAIL } from '../lib/youtube/thumbnails';
 import { relativeAge } from '../lib/format';
-import type { WatchRecord } from '../lib/watch/types';
+import type { WatchRecord } from '../lib/persistence/types';
 
 export function History() {
   const { records, unmark, clearAll } = useWatchState();

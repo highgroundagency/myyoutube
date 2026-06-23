@@ -1,15 +1,16 @@
 import { subDays } from 'date-fns';
 import { MOCK_MODE } from '../config/env';
 import { buildMockFeed } from '../fixtures';
-import { watchStore } from './watch/watchStore';
-import { dailyStatsStore, localDayKey } from './stats/dailyStatsStore';
+import { persistence } from './persistence/idbStore';
+import { localDayKey } from './persistence/types';
 
 const SEED_FLAG = 'gv-mock-seeded';
 
 /**
  * Seeds a little watch history and ~2 weeks of daily stats the first time the app
  * runs in MOCK_MODE, so the Stats and History pages are populated for the demo.
- * Runs once (guarded by a flag), so clearing history does not re-seed.
+ * Runs once (guarded by a flag), so clearing history does not re-seed. Called
+ * after persistence has hydrated (see main.tsx).
  */
 export function seedMockDataIfNeeded(): void {
   if (!MOCK_MODE) return;
@@ -27,7 +28,7 @@ export function seedMockDataIfNeeded(): void {
     .slice(0, 5)
     .forEach((v, i) => {
       const completed = i % 2 === 0;
-      watchStore.upsert({
+      persistence.upsertWatch({
         videoId: v.id,
         status: completed ? 'completed' : 'seen',
         watchedSeconds: completed ? v.durationSeconds : Math.round(v.durationSeconds * 0.4),
@@ -46,7 +47,7 @@ export function seedMockDataIfNeeded(): void {
   minutesByDay.forEach((mins, idx) => {
     if (mins <= 0) return;
     const day = localDayKey(subDays(new Date(), days - 1 - idx));
-    dailyStatsStore.add(mins * 60, idx % 4 === 0 ? 1 : 0, day);
+    persistence.addStats(mins * 60, idx % 4 === 0 ? 1 : 0, day);
   });
 
   try {

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { format, subDays } from 'date-fns';
 import { buildSeries, computeStreak, categoryMinutes, formatMinutes } from './compute';
-import type { DailyStats } from './dailyStatsStore';
-import type { WatchRecords } from '../watch/types';
+import type { DailyStats, WatchRecords } from '../persistence/types';
 
 const today = new Date('2026-06-23T12:00:00');
 const key = (offset: number) => format(subDays(today, offset), 'yyyy-MM-dd');

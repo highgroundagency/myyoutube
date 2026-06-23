@@ -3,10 +3,8 @@ import ReactDOM from 'react-dom/client';
 import '@fontsource-variable/inter';
 import './index.css';
 import { App } from './App';
+import { persistence } from './lib/persistence/idbStore';
 import { seedMockDataIfNeeded } from './lib/mockSeed';
-
-// In MOCK_MODE, populate a little history and stats so every page is demoable.
-seedMockDataIfNeeded();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) {
@@ -14,8 +12,18 @@ if (!rootEl) {
   throw new Error('Root element #root not found');
 }
 
-ReactDOM.createRoot(rootEl).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+// Hydrate persistence from IndexedDB, seed mock data in MOCK_MODE, then render.
+// Rendering after hydration avoids a flash of empty watch state and stats.
+persistence
+  .init()
+  .then(() => seedMockDataIfNeeded())
+  .catch(() => {
+    // Storage unavailable: the app still runs in-memory for this session.
+  })
+  .finally(() => {
+    ReactDOM.createRoot(rootEl).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  });

@@ -13,12 +13,13 @@ and the YouTube app do not catch it.
 - Long form only. Shorts (180 seconds or under) are filtered out.
 - Closed pool. The feed and every recommendation come only from your configured channels.
 - Watching a video removes it from the feed, plus a quick "mark as already seen" action.
-- Cross device sync of watch state and stats through Supabase, with an offline write queue.
+- Watch state and stats are stored locally on your device with IndexedDB, behind a clean
+  persistence interface that a remote sync backend can plug into later without touching the UI.
 - Caze TV live detection with a pinned live banner.
 - Stats dashboard: watch time per day, streak, videos completed, time by category.
 - Resilient by design: zod validated API responses, an error boundary, and explicit loading,
   empty, error, and loaded states everywhere.
-- Works fully in MOCK_MODE with no API key, no Supabase, and no network.
+- Works fully in MOCK_MODE with no API key and no network.
 
 ## Quick start (no secrets needed)
 
@@ -76,10 +77,6 @@ variables in the Vercel project settings.
 # Server side only. NO VITE_ prefix. Never imported anywhere under src/.
 YOUTUBE_API_KEY=
 
-# Client side (safe to expose, protected by Supabase row level security).
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-
 # Client flags
 VITE_MOCK_MODE=false
 VITE_EMBED_HOST=https://www.youtube.com
@@ -91,8 +88,8 @@ Rules that the code enforces:
   `src`, so it cannot leak into the client bundle.
 - If `YOUTUBE_API_KEY` is missing at the serverless layer, `/api/feed` returns a clear 503 and the
   client automatically falls back to MOCK_MODE with a banner.
-- If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` is missing, the app still runs. Sync is disabled
-  and a banner explains that your data is saved on this device only.
+- Watch state and stats are stored locally in your browser (IndexedDB). There is no account and no
+  server side user data, so there are no extra backend variables to set.
 
 ## Channels
 
@@ -123,20 +120,19 @@ The default daily quota is 10000 units. This app budgets far under it: about 2 c
 channel per feed refresh (around 14 units), cached at the CDN for 30 minutes, plus the Caze TV live
 check (100 units) cached for about 5 minutes and only while the app is open.
 
-## Supabase setup
+## Persistence (local first)
 
-1. Create a Supabase project. Copy the project URL and the anon key into `.env`
-   (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
-2. Open the SQL editor and paste the entire contents of `supabase/schema.sql`, then run it. This
-   creates the `watch_state` and `daily_stats` tables, row level security policies that scope every
-   row to its owner, and two atomic RPCs (`increment_daily_stats` and `upsert_watch_state`) so two
-   devices never clobber each other.
-3. Auth uses email magic links (PKCE). In Supabase Auth settings, add your deployed site URL and
-   `http://localhost:5173` to the allowed redirect URLs, otherwise the magic link will not return to
-   the app.
+Watch state (`watch_state`) and daily stats (`daily_stats`) are stored on the device in IndexedDB
+via `idb-keyval`. There is no account, no server side user data, and no network round trip for reads
+or writes. Everything is behind one clean interface, the `PersistenceProvider`
+(`src/providers/PersistenceProvider.tsx`), which exposes `getWatchState`, `markSeen`,
+`markCompleted`, `addWatchSeconds`, `getDailyStats`, and a few more.
 
-Row level security note: a misconfigured policy silently returns empty results rather than an error.
-The provided policies scope reads and writes to `auth.uid()`.
+Writes are optimistic: the in-memory copy updates immediately, then persists to IndexedDB best
+effort (a storage failure is caught and never breaks the UI). To add cross device sync later, plug a
+remote backend into the persistence layer; no UI changes are needed.
+
+Note: because storage is local, clearing the site's browser data resets your watch history and stats.
 
 ## YouTube Premium and app blockers (the embed host tradeoff)
 
@@ -167,11 +163,9 @@ frame depends on YouTube.
 1. Push this repo to GitHub and import it in Vercel (or run `vercel`).
 2. Vercel detects Vite automatically: build command `npm run build`, output directory `dist`. The
    `/api/*.ts` files are deployed as serverless functions with no extra config.
-3. In the Vercel project settings, add the environment variables: `YOUTUBE_API_KEY`,
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_EMBED_HOST`. Leave
-   `VITE_MOCK_MODE` unset or `false` in production.
-4. Add your deployed URL to the Supabase allowed redirect URLs (see above).
-5. PWA needs HTTPS in production, which Vercel provides. Localhost works for dev.
+3. In the Vercel project settings, add the environment variables: `YOUTUBE_API_KEY` and optionally
+   `VITE_EMBED_HOST`. Leave `VITE_MOCK_MODE` unset or `false` in production.
+4. PWA needs HTTPS in production, which Vercel provides. Localhost works for dev.
 
 ## Project structure
 
@@ -186,15 +180,14 @@ frame depends on YouTube.
   config/      channels, pure constants, client env (the only reader of import.meta.env)
   lib/youtube/ duration parser, thumbnails, zod schemas, normalize, filters, errors
   lib/player/  singleton IFrame loader and the tracking hook
-  lib/watch/   local first watch state store
-  lib/stats/   local first daily stats store and computations
-  lib/supabase/ client, auth sync, watch and stats persistence, offline queue
+  lib/persistence/ local first store (IndexedDB) and its data types
+  lib/stats/   stats computations (series, streak, category minutes)
+  providers/   theme and persistence providers
   hooks/       useFeed, useLive, useVideo, useWatchState, useDailyStats
   components/  TopBar, VideoCard, VideoGrid, ChannelChips, RecommendedRail, states
-  pages/       Home, Watch, Stats, Channel, History, Login
+  pages/       Home, Watch, Stats, Channel, History
   fixtures/    mock data for MOCK_MODE
 /scripts/      resolve-channels, generate-icons, check-emdash
-/supabase/     schema.sql (paste into the Supabase SQL editor)
 ```
 
 ## Testing
@@ -206,8 +199,9 @@ npm run test
 Covers the ISO 8601 duration parser (the full spec matrix), the normalize and filter pipeline, a
 fetch mocked `buildFeed` and live check (Shorts filtering, deleted and private skips, omitted ids,
 the Mandarin placeholder, quota detection), the player watch-time tracking (seen at 3 seconds, wall
-clock accrual immune to scrubbing, 90 percent completion, pause stops accrual), the watch store merge
-semantics, the stats computations, the fixtures, and a home render smoke that asserts a clean console.
+clock accrual immune to scrubbing, 90 percent completion, pause stops accrual), the persistence merge
+semantics and IndexedDB write through, the stats computations, the fixtures, and a home render smoke
+that asserts a clean console.
 
 A real browser console check is recommended before deploy (this environment cannot run a headless
 browser). The jsdom smoke test stands in for it in CI.
@@ -219,6 +213,6 @@ browser). The jsdom smoke test stands in for it in CI.
 - Quota exhaustion serves cached content with a quiet notice instead of an error.
 - The player loader is a singleton (one global ready callback), and create and destroy are idempotent
   so React StrictMode double mounting does not create two players or double count time.
-- Watch progress is never lost: optimistic local writes are queued and retried on failure rather than
-  rolled back.
+- Watch state and stats are written optimistically in memory and persisted to IndexedDB best effort,
+  so a storage hiccup never breaks the UI.
 - Day boundaries for stats use your local timezone, not UTC.

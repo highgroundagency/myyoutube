@@ -2,9 +2,8 @@ import { useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useFeed } from '../hooks/useFeed';
 import { useVideo } from '../hooks/useVideo';
-import { useWatchState } from '../hooks/useWatchState';
+import { usePersistence } from '../providers/persistence';
 import { useYouTubePlayer } from '../lib/player/useYouTubePlayer';
-import { dailyStatsStore } from '../lib/stats/dailyStatsStore';
 import { RecommendedRail } from '../components/RecommendedRail';
 import { ErrorState } from '../components/ErrorState';
 import { VideoCardSkeleton } from '../components/Skeletons';
@@ -41,7 +40,7 @@ export function Watch() {
   const { videoId = '' } = useParams();
   const navigate = useNavigate();
   const feedQuery = useFeed();
-  const { recordProgress, markSeen, markCompleted, isSeen } = useWatchState();
+  const { recordProgress, markSeen, markCompleted, isSeen, addWatchSeconds } = usePersistence();
 
   const pool = feedQuery.data?.videos ?? [];
   const poolVideo = pool.find((v) => v.id === videoId);
@@ -66,12 +65,15 @@ export function Watch() {
   const onCompleted = useCallback(() => {
     if (video) {
       markCompleted(video);
-      dailyStatsStore.add(0, 1);
+      addWatchSeconds(0, 1);
     }
-  }, [video, markCompleted]);
-  const onWatchTime = useCallback((delta: number) => {
-    dailyStatsStore.add(delta, 0);
-  }, []);
+  }, [video, markCompleted, addWatchSeconds]);
+  const onWatchTime = useCallback(
+    (delta: number) => {
+      addWatchSeconds(delta, 0);
+    },
+    [addWatchSeconds],
+  );
 
   const { containerRef, status, errorCode, reload } = useYouTubePlayer({
     videoId,

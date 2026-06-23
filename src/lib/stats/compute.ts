@@ -4,8 +4,7 @@
  * Empty days render as zero so charts never break on gaps.
  */
 import { format, subDays, parseISO } from 'date-fns';
-import type { DailyStats } from './dailyStatsStore';
-import type { WatchRecords } from '../watch/types';
+import type { DailyStats, WatchRecords } from '../persistence/types';
 import { STREAK_MIN_MINUTES } from '../../config/constants';
 
 /** Local day keys (yyyy-MM-dd) for the last `days` days, oldest first. */

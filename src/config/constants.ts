@@ -3,8 +3,8 @@
  *
  * DECISION: This file is intentionally PURE. It must not read import.meta.env or
  * process.env, because it is imported by BOTH the client (src) and the server
- * (/api) functions. Client only, env derived values (MOCK_MODE, Supabase keys,
- * embed host) live in src/config/env.ts so the server can safely import this file.
+ * (/api) functions. Client only, env derived values (MOCK_MODE, embed host)
+ * live in src/config/env.ts so the server can safely import this file.
  */
 
 // ----- App identity ---------------------------------------------------------
