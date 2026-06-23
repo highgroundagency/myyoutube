@@ -4,6 +4,8 @@ import { LIVE_CACHE_CONTROL } from '../src/config/constants';
 import { YouTubeError } from '../src/lib/youtube/errors';
 import type { LiveResponse } from '../src/lib/youtube/types';
 
+export const config = { maxDuration: 30 };
+
 /**
  * GET /api/live (section 10). Caze TV (and any channel with liveCheck) live
  * status only. Short cache. On quota or key trouble it returns an empty live

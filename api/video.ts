@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getVideoById, requireApiKey } from './_youtube';
 import { YouTubeError } from '../src/lib/youtube/errors';
 
+export const config = { maxDuration: 30 };
+
 /**
  * GET /api/video?id=VIDEO_ID (section 11). Single video details for a watch link
  * when the video is not already in the loaded feed pool. Returns 404 if the

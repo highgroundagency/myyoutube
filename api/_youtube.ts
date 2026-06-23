@@ -300,20 +300,30 @@ async function fetchRecentUploadIds(uploadsPlaylistId: string, apiKey: string): 
   return ids;
 }
 
-/** Fetch full details for video ids, chunked to 50 per call, mapped by id. */
+/**
+ * Fetch full details for video ids, chunked to 50 per call, mapped by id.
+ * Chunks run in parallel: with ~200 videos that is 1 round trip instead of 5,
+ * which keeps the function well under the serverless time limit.
+ */
 async function fetchVideoDetails(ids: string[], apiKey: string): Promise<Map<string, VideoRaw>> {
   const byId = new Map<string, VideoRaw>();
-  for (const group of chunk(ids, VIDEOS_LIST_CHUNK)) {
-    if (group.length === 0) continue;
-    const data = await ytFetch(
-      'videos',
-      {
-        part: 'contentDetails,snippet,liveStreamingDetails,status',
-        id: group.join(','),
-        maxResults: String(VIDEOS_LIST_CHUNK),
-      },
-      apiKey,
-    );
+  const groups = chunk(ids, VIDEOS_LIST_CHUNK).filter((g) => g.length > 0);
+
+  const responses = await Promise.all(
+    groups.map((group) =>
+      ytFetch(
+        'videos',
+        {
+          part: 'contentDetails,snippet,liveStreamingDetails,status',
+          id: group.join(','),
+          maxResults: String(VIDEOS_LIST_CHUNK),
+        },
+        apiKey,
+      ),
+    ),
+  );
+
+  for (const data of responses) {
     const list = listResponseSchema.safeParse(data);
     const items = parseValidItems(videoSchema, list.success ? list.data.items : []);
     // Map by id. videos.list may omit ids (deleted, private, region blocked) and

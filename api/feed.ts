@@ -5,6 +5,10 @@ import { FEED_CACHE_CONTROL } from '../src/config/constants';
 import { YouTubeError } from '../src/lib/youtube/errors';
 import type { FeedResponse, ResolvedChannel, Video } from '../src/lib/youtube/types';
 
+// Give the first (uncached) feed build room to finish on a cold start. After it
+// succeeds the CDN serves it for 30 minutes, so this longer limit is rarely used.
+export const config = { maxDuration: 30 };
+
 type CachedFeed = { videos: Video[]; resolvedChannels: ResolvedChannel[] };
 
 /**
