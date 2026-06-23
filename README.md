@@ -25,25 +25,32 @@ and the YouTube app do not catch it.
 
 ```bash
 npm install
+
+# create a local .env with your YouTube Data API v3 key (server side only):
+echo "YOUTUBE_API_KEY=your_key_here" > .env
+
 npm run dev
 ```
 
-By default `npm run dev` runs Vite. To use the bundled mock data (so the whole UI works with no API
-key and no network), set the flag:
+Open http://localhost:5173 and you will see REAL videos from your channels. `npm run dev` runs the
+`/api` functions in-process (no Vercel CLI needed), reading `YOUTUBE_API_KEY` from `.env`.
+
+No key handy, or just want to work on the UI offline? Use the bundled sample data instead:
 
 ```bash
 VITE_MOCK_MODE=true npm run dev
 ```
 
-Open http://localhost:5173. You will see a "Showing mock data" banner and a populated feed, watch
-page, history, and stats.
+That shows a "sample data" banner with a populated feed, watch page, history, and stats, with no key
+and no network. (If you start `npm run dev` without a key in `.env`, it also falls back to sample
+data with a banner rather than erroring.)
 
 ## Scripts
 
 | Script | What it does |
 | --- | --- |
-| `npm run dev` | Vite dev server (use `VITE_MOCK_MODE=true` for offline UI work). |
-| `npm run dev:api` | `vercel dev`: runs the app and the `/api` serverless functions locally. |
+| `npm run dev` | Dev server that also serves the real `/api` (reads `YOUTUBE_API_KEY` from `.env`). |
+| `npm run dev:api` | `vercel dev`: an alternative that runs the app and `/api` on the Vercel runtime. |
 | `npm run build` | Type check then production build (also generates the PWA service worker). |
 | `npm run preview` | Serve the production build locally. |
 | `npm run typecheck` | `tsc --noEmit`, zero type errors expected. |
@@ -55,18 +62,15 @@ page, history, and stats.
 
 ## Local development with the API
 
-The plain Vite dev server does NOT run the `/api` functions. There are two ways to develop:
+`npm run dev` serves the `/api` functions in-process through a small Vite dev middleware, so you get
+real videos with one command. It loads `YOUTUBE_API_KEY` from `.env` into the dev server process (server
+side only, never exposed to the client). No Vercel CLI is required for local development.
 
-1. UI only, no secrets: `VITE_MOCK_MODE=true npm run dev`. Reads `src/fixtures/feed.json`.
-2. Full stack including the API: install the Vercel CLI and run `vercel dev`.
+Other options:
 
-```bash
-npm i -g vercel
-vercel link        # link this folder to a Vercel project (one time)
-npm run dev:api    # runs vercel dev: app + /api functions
-```
-
-`vercel dev` reads your local `.env`, so set `YOUTUBE_API_KEY` there first.
+- UI only, no key, no network: `VITE_MOCK_MODE=true npm run dev` (reads `src/fixtures/feed.json`).
+- Run on the actual Vercel runtime locally (closest to production): `npm i -g vercel`, then
+  `npm run dev:api` (which runs `vercel dev`). It also reads `.env`.
 
 ## Environment variables
 
