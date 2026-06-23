@@ -1,27 +1,42 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { Home } from './pages/Home';
-import { Watch } from './pages/Watch';
-import { Stats } from './pages/Stats';
-import { Channel } from './pages/Channel';
-import { History } from './pages/History';
-import { Login } from './pages/Login';
-import { NotFound } from './pages/NotFound';
+
+// Route based code splitting keeps the initial bundle lean (the player and the
+// Recharts powered stats page are only loaded when visited). Home stays eager
+// because it is the landing route.
+const Watch = lazy(() => import('./pages/Watch').then((m) => ({ default: m.Watch })));
+const Stats = lazy(() => import('./pages/Stats').then((m) => ({ default: m.Stats })));
+const Channel = lazy(() => import('./pages/Channel').then((m) => ({ default: m.Channel })));
+const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
+const Login = lazy(() => import('./pages/Login').then((m) => ({ default: m.Login })));
+const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" aria-label="Loading" role="status">
+      <span className="h-7 w-7 animate-spin rounded-full border-2 border-line border-t-accent-500" />
+    </div>
+  );
+}
 
 export function AppRoutes() {
   return (
-    <Routes>
-      {/* Login is full screen, outside the app shell. */}
-      <Route path="/login" element={<Login />} />
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        {/* Login is full screen, outside the app shell. */}
+        <Route path="/login" element={<Login />} />
 
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/watch/:videoId" element={<Watch />} />
-        <Route path="/channel/:channelKey" element={<Channel />} />
-        <Route path="/history" element={<History />} />
-        <Route path="/stats" element={<Stats />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/watch/:videoId" element={<Watch />} />
+          <Route path="/channel/:channelKey" element={<Channel />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/stats" element={<Stats />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
