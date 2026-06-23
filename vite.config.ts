@@ -15,9 +15,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'placeholder.svg'],
       manifest: {
+        id: '/',
         name: 'GabesVideos',
         short_name: 'GabesVideos',
         description: 'A calm, curated personal video feed. Long form only.',
+        lang: 'en',
         // Deliberately neutral. Avoids the word "youtube" anywhere visible (section 16).
         theme_color: '#ffffff',
         background_color: '#ffffff',

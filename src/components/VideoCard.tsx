@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { m, useReducedMotion } from 'framer-motion';
 import type { Video } from '../lib/youtube/types';
 import { Badge } from './Badge';
 import { PLACEHOLDER_THUMBNAIL } from '../lib/youtube/thumbnails';
@@ -42,11 +43,17 @@ export function VideoCard({ video, seen = false, onToggleSeen }: VideoCardProps)
   const isLive = video.liveState === 'live';
   const isUpcoming = video.liveState === 'upcoming';
   const duration = formatDuration(video.durationSeconds);
+  const reduceMotion = useReducedMotion();
 
   const handleToggle = () => onToggleSeen?.(video);
 
   return (
-    <article className={`group flex flex-col gap-3 ${seen ? 'opacity-60' : ''}`}>
+    <m.article
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className={`group flex flex-col gap-3 ${seen ? 'opacity-60' : ''}`}
+    >
       <div className="relative">
         <Link
           to={`/watch/${video.id}`}
@@ -121,6 +128,6 @@ export function VideoCard({ video, seen = false, onToggleSeen }: VideoCardProps)
           </p>
         </div>
       </div>
-    </article>
+    </m.article>
   );
 }
