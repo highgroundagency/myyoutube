@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Semantic color tokens. Light is the default theme (see ThemeProvider).
+  The `.dark` class on <html> swaps the palette. Tailwind maps these via
+  rgb(var(--token) / <alpha-value>) so opacity utilities still work.
+*/
+:root {
+  --bg: 250 250 250;
+  --surface: 255 255 255;
+  --surface-2: 244 244 245;
+  --line: 228 228 231;
+  --fg: 24 24 27;
+  --fg-muted: 113 113 122;
+}
+
+.dark {
+  --bg: 11 11 13;
+  --surface: 20 20 23;
+  --surface-2: 30 30 34;
+  --line: 39 39 42;
+  --fg: 244 244 245;
+  --fg-muted: 161 161 170;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg antialiased;
+  font-family: theme('fontFamily.sans');
+}
+
+/* Respect reduced motion globally as a safety net (Framer Motion also checks it). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible focus ring for keyboard users on interactive elements. */
+:focus-visible {
+  outline: 2px solid theme('colors.accent.500');
+  outline-offset: 2px;
+}
+
+/* Line clamp helper used by video titles (Tailwind ships line-clamp, this is a fallback name). */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
