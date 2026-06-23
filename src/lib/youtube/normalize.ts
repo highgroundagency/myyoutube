@@ -26,14 +26,9 @@ function resolveLiveState(raw: VideoRaw): LiveState {
   return 'none';
 }
 
-export function normalizeVideo(raw: VideoRaw, channelsById: ChannelLookup): Video | null {
-  const channelId = raw.snippet?.channelId;
-  if (!channelId) return null;
+type ChannelInfo = { key: string; label: string; category?: string };
 
-  const channel = channelsById.get(channelId);
-  // Closed pool: a video from a channel we do not track is dropped.
-  if (!channel) return null;
-
+function buildVideo(raw: VideoRaw, channel: ChannelInfo): Video | null {
   const title = raw.snippet?.title?.trim();
   if (!title) return null;
 
@@ -73,4 +68,28 @@ export function normalizeVideo(raw: VideoRaw, channelsById: ChannelLookup): Vide
       ? { allowed: region?.allowed, blocked: region?.blocked }
       : undefined,
   };
+}
+
+/**
+ * Normalize within the closed pool: returns null for a video whose channel is
+ * not one we track (so the feed never shows outside content).
+ */
+export function normalizeVideo(raw: VideoRaw, channelsById: ChannelLookup): Video | null {
+  const channelId = raw.snippet?.channelId;
+  if (!channelId) return null;
+  const channel = channelsById.get(channelId);
+  if (!channel) return null;
+  return buildVideo(raw, channel);
+}
+
+/**
+ * Loose normalize for a single video fetched on demand (a direct watch link).
+ * Used only when the strict, pool-scoped normalize returns null, so an older
+ * video from one of my channels (or a valid direct link) still plays.
+ */
+export function normalizeVideoLoose(raw: VideoRaw): Video | null {
+  return buildVideo(raw, {
+    key: raw.snippet?.channelId ?? 'external',
+    label: raw.snippet?.channelTitle ?? 'Channel',
+  });
 }

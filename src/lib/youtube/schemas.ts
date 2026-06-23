@@ -38,6 +38,7 @@ export const videoSchema = z.object({
       title: z.string().optional(),
       publishedAt: z.string().optional(),
       channelId: z.string().optional(),
+      channelTitle: z.string().optional(),
       liveBroadcastContent: z.string().optional(),
       thumbnails: thumbnailsSchema.optional(),
     })

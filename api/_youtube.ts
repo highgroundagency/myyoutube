@@ -29,7 +29,12 @@ import {
   type ChannelRaw,
   type VideoRaw,
 } from '../src/lib/youtube/schemas';
-import { normalizeVideo, isRemovedPlaylistTitle, type ChannelLookup } from '../src/lib/youtube/normalize';
+import {
+  normalizeVideo,
+  normalizeVideoLoose,
+  isRemovedPlaylistTitle,
+  type ChannelLookup,
+} from '../src/lib/youtube/normalize';
 import { applyFilters, dedupeById, sortNewestFirst } from '../src/lib/youtube/filters';
 import { YouTubeError, classifyYouTubeReason } from '../src/lib/youtube/errors';
 import { cacheGet, cacheSet } from './_cache';
@@ -329,6 +334,19 @@ export async function buildFeed(apiKey: string): Promise<{ videos: Video[]; reso
   const videos = sortNewestFirst(dedupeById(filtered));
 
   return { videos, resolvedChannels: resolved };
+}
+
+/** Fetch a single video by id (on demand watch links, section 11). */
+export async function getVideoById(apiKey: string, id: string): Promise<Video | null> {
+  const details = await fetchVideoDetails([id], apiKey);
+  const raw = details.get(id);
+  if (!raw) return null;
+
+  const resolved = await resolveAllChannels(apiKey);
+  const lookup = channelLookupFrom(resolved);
+  // Prefer the pool-scoped normalize; fall back to loose so a valid direct link
+  // (an older upload, or a guest video) still plays.
+  return normalizeVideo(raw, lookup) ?? normalizeVideoLoose(raw);
 }
 
 // ---------------------------------------------------------------------------

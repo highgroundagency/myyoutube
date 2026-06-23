@@ -68,5 +68,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.{test,spec}.ts'],
+    // Tests run in MOCK_MODE so UI tests exercise the fixtures with no network.
+    env: { VITE_MOCK_MODE: 'true' },
   },
 });
