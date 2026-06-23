@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+
+# build output
+dist
+dev-dist
+*.tsbuildinfo
+
+# vercel
+.vercel
+
+# test coverage
+coverage
+
+# local env (never commit real secrets)
+.env
+.env.local
+.env.*.local
+
+# editor / os
+.DS_Store
+*.log
+.idea
+.vscode/*
+!.vscode/extensions.json
