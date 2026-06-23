@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A private, curated personal video app. Long form only, no Shorts, closed pool of chosen channels.",
+  "engines": {
+    "node": ">=18.18"
+  },
   "scripts": {
     "dev": "vite",
     "dev:api": "vercel dev",

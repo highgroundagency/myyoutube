@@ -70,7 +70,14 @@ export async function syncOnLogin(): Promise<void> {
   }
 }
 
-/** Install handlers so future local writes mirror to Supabase (offline safe). */
+/**
+ * Install handlers so future local writes mirror to Supabase (offline safe).
+ *
+ * DECISION: on a write failure we queue and retry rather than roll back the
+ * optimistic local update. The local store is the source of truth on the client,
+ * and rolling back would discard the user's explicit action (and watch progress).
+ * Queue-and-retry honors the "watch progress must never be lost" requirement.
+ */
 export function installSyncHandlers(): void {
   watchStore.setSyncHandler((record) => {
     pushWatchRecord(record).catch(() => enqueue({ kind: 'watch', record }));
