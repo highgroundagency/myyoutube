@@ -5,13 +5,13 @@
  *   YOUTUBE_API_KEY=... npm run resolve-channels
  * or put YOUTUBE_API_KEY in a local .env (loaded below).
  *
- * Prints a table of handle -> resolved channel id, uploads playlist id, and the
- * resolution method (handle, handle-no-at, search, or failed). Use this to catch
- * wrong handles before building on top of them. Channels resolved by SEARCH or
- * marked FAILED are highlighted so they can be verified or fixed.
+ * Prints a table for every channel: input (handle or id), resolved channel id,
+ * uploads playlist id, resolution method (id, handle, handle-no-at, search, or
+ * failed), and the resolved title so you can eyeball that each one resolved to
+ * the correct channel (not a wrong same-named or "- Topic" channel).
  */
 import 'dotenv/config';
-import { CHANNELS } from '../src/config/channels';
+import { CHANNELS, type ChannelConfig } from '../src/config/channels';
 import { resolveChannel } from '../api/_youtube';
 import type { ResolvedChannel } from '../src/lib/youtube/types';
 
@@ -20,16 +20,34 @@ function pad(value: string, width: number): string {
   return v.padEnd(width, ' ');
 }
 
-function printTable(rows: ResolvedChannel[]): void {
-  const header = `${pad('key', 14)}${pad('handle', 18)}${pad('method', 14)}${pad('channelId', 26)}${pad('uploads', 26)}title`;
+/** What was given in config for this channel (handle or id or search name). */
+function inputOf(config: ChannelConfig): string {
+  if (config.channelId) return `id:${config.channelId}`;
+  if (config.handle) return config.handle;
+  if (config.searchName) return `search:"${config.searchName}"`;
+  return '(none)';
+}
+
+const W = { key: 14, input: 30, method: 13, id: 26, uploads: 26 };
+
+function printTable(rows: Array<{ config: ChannelConfig; resolved: ResolvedChannel }>): void {
+  const header =
+    pad('key', W.key) +
+    pad('input', W.input) +
+    pad('method', W.method) +
+    pad('resolved id', W.id) +
+    pad('uploads', W.uploads) +
+    'resolved title';
   console.log(header);
   console.log('-'.repeat(header.length));
-  for (const r of rows) {
+  for (const { config, resolved } of rows) {
     console.log(
-      `${pad(r.key, 14)}${pad(r.handle, 18)}${pad(r.resolvedBy, 14)}${pad(r.channelId ?? '(none)', 26)}${pad(
-        r.uploadsPlaylistId ?? '(none)',
-        26,
-      )}${r.title ?? '(none)'}`,
+      pad(config.key, W.key) +
+        pad(inputOf(config), W.input) +
+        pad(resolved.resolvedBy, W.method) +
+        pad(resolved.channelId ?? '(none)', W.id) +
+        pad(resolved.uploadsPlaylistId ?? '(none)', W.uploads) +
+        (resolved.title ?? '(none)'),
     );
   }
 }
@@ -45,35 +63,40 @@ async function main(): Promise<void> {
   console.log(`Resolving ${CHANNELS.length} channels...\n`);
 
   const settled = await Promise.allSettled(CHANNELS.map((c) => resolveChannel(c, apiKey)));
-  const rows: ResolvedChannel[] = settled.map((result, i) => {
-    if (result.status === 'fulfilled') return result.value;
+  const rows = settled.map((result, i) => {
     const config = CHANNELS[i];
+    if (result.status === 'fulfilled') return { config, resolved: result.value };
     console.error(`Error resolving ${config.key}:`, result.reason?.message ?? result.reason);
     return {
-      key: config.key,
-      handle: config.handle,
-      label: config.label,
-      channelId: null,
-      uploadsPlaylistId: null,
-      title: null,
-      thumbnailUrl: null,
-      resolvedBy: 'failed',
+      config,
+      resolved: {
+        key: config.key,
+        handle: config.handle ?? '',
+        label: config.label,
+        channelId: null,
+        uploadsPlaylistId: null,
+        title: null,
+        thumbnailUrl: null,
+        resolvedBy: 'failed',
+      } satisfies ResolvedChannel,
     };
   });
 
   console.log('');
   printTable(rows);
 
-  const bySearch = rows.filter((r) => r.resolvedBy === 'search');
-  const failed = rows.filter((r) => r.resolvedBy === 'failed');
+  const bySearch = rows.filter((r) => r.resolved.resolvedBy === 'search');
+  const failed = rows.filter((r) => r.resolved.resolvedBy === 'failed');
 
   if (bySearch.length > 0) {
-    console.log('\nResolved by SEARCH (verify these are the right channels):');
-    for (const r of bySearch) console.log(`  - ${r.key} (${r.handle}) -> ${r.title} [${r.channelId}]`);
+    console.log('\nResolved by SEARCH (verify these titles are correct):');
+    for (const { resolved } of bySearch) {
+      console.log(`  - ${resolved.key}: "${resolved.title}" [${resolved.channelId}]`);
+    }
   }
   if (failed.length > 0) {
-    console.log('\nFAILED to resolve (fix the handle in src/config/channels.ts):');
-    for (const r of failed) console.log(`  - ${r.key} (${r.handle})`);
+    console.log('\nFAILED to resolve (fix the config in src/config/channels.ts):');
+    for (const { config } of failed) console.log(`  - ${config.key} (${inputOf(config)})`);
   }
 
   console.log(

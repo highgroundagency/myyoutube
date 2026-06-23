@@ -2,9 +2,13 @@
  * The closed pool of channels. This is the whole world of content the app shows.
  * Plain data, imported by both the client and the /api functions.
  *
- * Every handle below is UNVERIFIED until the resolution script confirms it
- * (npm run resolve-channels, section 6). A handle that does not resolve is
- * skipped in the feed and reported, never a crash.
+ * A channel can be resolved three ways, in priority order:
+ *  1. channelId: resolve directly via channels.list?id (most reliable). Optionally
+ *     verified against expectedTitleIncludes, and falls back to search if it does
+ *     not match (guards against a wrong same-named or "- Topic" channel).
+ *  2. handle: resolve via channels.list?forHandle (with a no-@ retry).
+ *  3. searchName (or label): resolve via search.list as a last resort.
+ * Anything that does not resolve is skipped in the feed and reported, never a crash.
  */
 
 export type ChannelCategory = 'entertainment' | 'health' | 'language' | 'faith' | 'sports';
@@ -12,10 +16,20 @@ export type ChannelCategory = 'entertainment' | 'health' | 'language' | 'faith' 
 export type ChannelConfig = {
   /** Internal stable id, used for joins and stats. Never changes. */
   key: string;
-  /** YouTube @handle used to resolve the channelId. */
-  handle: string;
-  /** Display name. */
+  /** Display name shown in the app. */
   label: string;
+  /** YouTube @handle, when known. Optional. */
+  handle?: string;
+  /** Resolve this channel directly by id, skipping handle resolution. */
+  channelId?: string;
+  /** Exact name to use for the search fallback (defaults to label). */
+  searchName?: string;
+  /**
+   * When resolving by channelId, the resolved title must contain this string
+   * (case insensitive). If it does not, the id is ignored and we fall back to
+   * searching searchName, so a wrong same-named or "- Topic" channel is rejected.
+   */
+  expectedTitleIncludes?: string;
   /** Run the eventType=live check for this channel (costs 100 units, cache it). */
   liveCheck?: boolean;
   category?: ChannelCategory;
@@ -26,11 +40,19 @@ export const CHANNELS: ChannelConfig[] = [
   { key: 'mrbeastgaming', handle: '@MrBeastGaming', label: 'MrBeast Gaming', category: 'entertainment' },
   { key: 'bryanjohnson', handle: '@bryanjohnson', label: 'Bryan Johnson', category: 'health' },
   { key: 'cazetv', handle: '@CazeTV', label: 'Caze TV', category: 'sports', liveCheck: true },
-  // TODO: Gabe will replace @CHANGE_ME with the real Mandarin lessons handle.
-  // Until then this channel is skipped in the feed (it will not resolve).
-  { key: 'mandarin', handle: '@CHANGE_ME', label: 'Mandarin lessons', category: 'language' },
+  // Resolved by search (no handle needed).
+  { key: 'mandarin', label: 'Mandarin Corner', searchName: 'Mandarin Corner', category: 'language' },
   { key: 'josephprince', handle: '@JosephPrince', label: 'Joseph Prince', category: 'faith' },
-  { key: 'andrewfarley', handle: '@AndrewFarley', label: 'Andrew Farley', category: 'faith' },
+  // Resolved directly by id, verified against the expected teaching channel title.
+  // If the id ever returns a different channel, it falls back to searching the name.
+  {
+    key: 'andrewfarley',
+    channelId: 'UCngAqvQikHu7RF9kVs8M29g',
+    label: 'Andrew Farley (The Grace Message)',
+    expectedTitleIncludes: 'The Grace Message with Dr. Andrew Farley',
+    searchName: 'The Grace Message with Dr. Andrew Farley',
+    category: 'faith',
+  },
 ];
 
 /** Quick lookup by internal key. */

@@ -171,7 +171,7 @@ export const resolvedChannelSchema = z.object({
   uploadsPlaylistId: z.string().nullable(),
   title: z.string().nullable(),
   thumbnailUrl: z.string().nullable(),
-  resolvedBy: z.enum(['handle', 'handle-no-at', 'search', 'failed']),
+  resolvedBy: z.enum(['id', 'handle', 'handle-no-at', 'search', 'failed']),
 });
 
 export const feedResponseSchema = z.object({

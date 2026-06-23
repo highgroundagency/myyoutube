@@ -37,7 +37,7 @@ export type Video = {
 };
 
 /** How a channel handle was resolved (for the resolution report and feed payload). */
-export type ResolveMethod = 'handle' | 'handle-no-at' | 'search' | 'failed';
+export type ResolveMethod = 'id' | 'handle' | 'handle-no-at' | 'search' | 'failed';
 
 export type ResolvedChannel = {
   key: string;

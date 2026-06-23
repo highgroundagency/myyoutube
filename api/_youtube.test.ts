@@ -45,13 +45,19 @@ function installFetchMock() {
     const sp = url.searchParams;
 
     if (ep === 'channels') {
-      const handle = sp.get('forHandle') ?? sp.get('id') ?? '';
-      const key = handle.replace(/^@/, '').toLowerCase();
+      const forHandle = sp.get('forHandle');
+      const id = sp.get('id');
+      const raw = forHandle ?? id ?? '';
+      const key = raw.replace(/^@/, '').toLowerCase();
+      // The Andrew Farley id must report the expected teaching channel title so
+      // the id-with-title-verification path succeeds.
+      const title =
+        id === 'UCngAqvQikHu7RF9kVs8M29g' ? 'The Grace Message with Dr. Andrew Farley' : raw;
       return jsonRes({
         items: [
           {
             id: `UC_${key}`,
-            snippet: { title: handle, thumbnails: { default: { url: 't' } } },
+            snippet: { title, thumbnails: { default: { url: 't' } } },
             contentDetails: { relatedPlaylists: { uploads: `UU_${key}` } },
           },
         ],
@@ -84,6 +90,13 @@ function installFetchMock() {
     }
 
     if (ep === 'search') {
+      // Channel resolution search (type=channel).
+      if (sp.get('type') === 'channel') {
+        const q = sp.get('q') ?? '';
+        const key = q.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return jsonRes({ items: [{ id: { channelId: `UCs${key}` }, snippet: { title: q, channelId: `UCs${key}` } }] });
+      }
+      // Live check search (type=video, eventType=live).
       if (cfg.liveSearchVideoId) {
         return jsonRes({ items: [{ id: { videoId: cfg.liveSearchVideoId }, snippet: { channelId: 'UC_cazetv' } }] });
       }
@@ -114,13 +127,16 @@ describe('buildFeed', () => {
     expect(videos.some((v) => v.id.endsWith('_short'))).toBe(false);
     expect(videos.some((v) => v.id.endsWith('_omit'))).toBe(false);
 
-    // The placeholder Mandarin handle resolves as failed and is skipped.
+    // Mandarin resolves by search (no handle), Andrew Farley by id (title verified).
     const mandarin = resolvedChannels.find((c) => c.key === 'mandarin');
-    expect(mandarin?.resolvedBy).toBe('failed');
-    expect(videos.some((v) => v.channelKey === 'mandarin')).toBe(false);
+    expect(mandarin?.resolvedBy).toBe('search');
+    const andrew = resolvedChannels.find((c) => c.key === 'andrewfarley');
+    expect(andrew?.resolvedBy).toBe('id');
+    expect(andrew?.title).toBe('The Grace Message with Dr. Andrew Farley');
 
-    // Six real channels each contribute exactly one long form video.
-    expect(videos.length).toBe(6);
+    // All seven channels resolve and each contributes one long form video.
+    expect(videos.some((v) => v.channelKey === 'mandarin')).toBe(true);
+    expect(videos.length).toBe(7);
   });
 
   it('throws a quota error (not a raw 500) when videos.list is rate limited', async () => {

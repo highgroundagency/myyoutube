@@ -130,13 +130,30 @@ async function ytFetch(
 function failedResolved(config: ChannelConfig): ResolvedChannel {
   return {
     key: config.key,
-    handle: config.handle,
+    handle: config.handle ?? '',
     label: config.label,
     channelId: null,
     uploadsPlaylistId: null,
     title: null,
     thumbnailUrl: null,
     resolvedBy: 'failed',
+  };
+}
+
+function buildResolved(
+  config: ChannelConfig,
+  item: ChannelRaw,
+  resolvedBy: ResolvedChannel['resolvedBy'],
+): ResolvedChannel {
+  return {
+    key: config.key,
+    handle: config.handle ?? '',
+    label: config.label,
+    channelId: item.id,
+    uploadsPlaylistId: item.contentDetails?.relatedPlaylists?.uploads ?? null,
+    title: item.snippet?.title ?? null,
+    thumbnailUrl: firstThumbUrl(item.snippet?.thumbnails),
+    resolvedBy,
   };
 }
 
@@ -157,63 +174,80 @@ async function getChannelById(channelId: string, apiKey: string) {
   return items[0] ?? null;
 }
 
-/**
- * Resolve one channel handle to a channelId + uploads playlist, with fallbacks:
- * 1. channels.list forHandle=@handle
- * 2. retry without the leading @
- * 3. search.list type=channel q=label (logged, may be wrong)
- * 4. failed (skipped in the feed, reported)
- *
- * Quota and key errors propagate so the caller can surface them. Other failures
- * for a single channel resolve to "failed" rather than crashing the whole feed.
- */
-export async function resolveChannel(config: ChannelConfig, apiKey: string): Promise<ResolvedChannel> {
-  // Placeholder handle: do not spend quota, it cannot resolve.
-  if (config.handle === UNRESOLVED_HANDLE) {
-    return failedResolved(config);
-  }
-
-  const buildFrom = (item: ChannelRaw, resolvedBy: ResolvedChannel['resolvedBy']): ResolvedChannel => ({
-    key: config.key,
-    handle: config.handle,
-    label: config.label,
-    channelId: item.id,
-    uploadsPlaylistId: item.contentDetails?.relatedPlaylists?.uploads ?? null,
-    title: item.snippet?.title ?? null,
-    thumbnailUrl: firstThumbUrl(item.snippet?.thumbnails),
-    resolvedBy,
-  });
-
-  // 1. With the @ as configured.
-  let items = await channelsListByHandle(config.handle, apiKey);
-  if (items[0]) return buildFrom(items[0], 'handle');
-
-  // 2. Without the leading @.
-  const noAt = config.handle.replace(/^@/, '');
-  if (noAt !== config.handle) {
-    items = await channelsListByHandle(noAt, apiKey);
-    if (items[0]) return buildFrom(items[0], 'handle-no-at');
-  }
-
-  // 3. Search fallback. Costs 100 units, and may pick the wrong channel.
+/** Search.list for a channel by name, then load it by id to get the uploads playlist. */
+async function resolveBySearch(
+  config: ChannelConfig,
+  apiKey: string,
+): Promise<ResolvedChannel | null> {
+  const query = config.searchName ?? config.label;
   const searchData = await ytFetch(
     'search',
-    { part: 'snippet', type: 'channel', q: config.label, maxResults: '1' },
+    { part: 'snippet', type: 'channel', q: query, maxResults: '1' },
     apiKey,
   );
   const searchList = listResponseSchema.safeParse(searchData);
   const searchItems = parseValidItems(searchItemSchema, searchList.success ? searchList.data.items : []);
   const foundChannelId = searchItems[0]?.id?.channelId ?? searchItems[0]?.snippet?.channelId;
-  if (foundChannelId) {
-    console.warn(
-      `[resolve] channel "${config.key}" resolved by SEARCH (handle ${config.handle} did not match). Verify this is correct.`,
-    );
-    const byId = await getChannelById(foundChannelId, apiKey);
-    if (byId) return buildFrom(byId, 'search');
+  if (!foundChannelId) return null;
+
+  const byId = await getChannelById(foundChannelId, apiKey);
+  if (!byId) return null;
+  console.warn(
+    `[resolve] channel "${config.key}" resolved by SEARCH ("${query}") to "${byId.snippet?.title ?? '?'}". Verify the title.`,
+  );
+  return buildResolved(config, byId, 'search');
+}
+
+/**
+ * Resolve one channel to a channelId + uploads playlist, in priority order:
+ * 1. channelId: channels.list?id, optionally verified against expectedTitleIncludes
+ *    (falls back to search if the title does not match).
+ * 2. handle: channels.list?forHandle, then a no-@ retry.
+ * 3. search.list by searchName or label.
+ * 4. failed (skipped in the feed, reported).
+ *
+ * Quota and key errors propagate so the caller can surface them. Other failures
+ * for a single channel resolve to "failed" rather than crashing the whole feed.
+ */
+export async function resolveChannel(config: ChannelConfig, apiKey: string): Promise<ResolvedChannel> {
+  // 1. Direct by channelId (most reliable).
+  if (config.channelId) {
+    const byId = await getChannelById(config.channelId, apiKey);
+    if (byId) {
+      const title = byId.snippet?.title ?? '';
+      const ok =
+        !config.expectedTitleIncludes ||
+        title.toLowerCase().includes(config.expectedTitleIncludes.toLowerCase());
+      if (ok) return buildResolved(config, byId, 'id');
+      console.warn(
+        `[resolve] channel "${config.key}" id ${config.channelId} returned "${title}", expected "${config.expectedTitleIncludes}". Falling back to search.`,
+      );
+    } else {
+      console.warn(`[resolve] channel "${config.key}" id ${config.channelId} did not resolve. Falling back.`);
+    }
+    // Title mismatch or missing: fall back to search by the configured name.
+    const bySearch = await resolveBySearch(config, apiKey);
+    return bySearch ?? failedResolved(config);
   }
 
+  // 2. Handle resolution (skip the placeholder).
+  if (config.handle && config.handle !== UNRESOLVED_HANDLE) {
+    let items = await channelsListByHandle(config.handle, apiKey);
+    if (items[0]) return buildResolved(config, items[0], 'handle');
+
+    const noAt = config.handle.replace(/^@/, '');
+    if (noAt !== config.handle) {
+      items = await channelsListByHandle(noAt, apiKey);
+      if (items[0]) return buildResolved(config, items[0], 'handle-no-at');
+    }
+  }
+
+  // 3. Search fallback by name (also the path for channels with no handle).
+  const bySearch = await resolveBySearch(config, apiKey);
+  if (bySearch) return bySearch;
+
   // 4. Could not resolve.
-  console.warn(`[resolve] channel "${config.key}" (${config.handle}) could not be resolved. Skipping.`);
+  console.warn(`[resolve] channel "${config.key}" could not be resolved. Skipping.`);
   return failedResolved(config);
 }
 
