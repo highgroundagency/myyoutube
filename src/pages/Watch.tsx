@@ -83,6 +83,9 @@ export function Watch() {
     onFurthest,
     onCompleted,
     onWatchTime,
+    media: video
+      ? { title: video.title, channelLabel: video.channelLabel, thumbnailUrl: video.thumbnailUrl }
+      : undefined,
   });
 
   const markSeenAndBack = () => {

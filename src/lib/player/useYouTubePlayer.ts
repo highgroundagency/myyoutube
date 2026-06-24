@@ -25,6 +25,8 @@ type UseYouTubePlayerArgs = {
   onWatchTime?: (deltaSeconds: number) => void;
   /** Player error code (2, 5, 100, 101, 150). */
   onError?: (code: number) => void;
+  /** Metadata for the lock screen / notification (Media Session API). */
+  media?: { title: string; channelLabel: string; thumbnailUrl: string };
 };
 
 export type UseYouTubePlayerResult = {
@@ -159,12 +161,83 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
       }
     };
 
+    // Media Session API: shows the title, channel, and thumbnail on the lock
+    // screen / notification, with play/pause/seek controls. Best effort. It does
+    // NOT make a YouTube embed play with the screen off (YouTube blocks that for
+    // embeds), but it improves controls and helps on some Android setups.
+    const updatePlaybackState = (state: MediaSessionPlaybackState): void => {
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = state;
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    const setupMediaSession = (): void => {
+      if (!('mediaSession' in navigator)) return;
+      try {
+        const m = argsRef.current.media;
+        if (m) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: m.title,
+            artist: m.channelLabel,
+            artwork: m.thumbnailUrl
+              ? [{ src: m.thumbnailUrl, sizes: '480x360', type: 'image/jpeg' }]
+              : [],
+          });
+        }
+        const guard = (fn: () => void) => () => {
+          try {
+            fn();
+          } catch {
+            // ignore player teardown races
+          }
+        };
+        navigator.mediaSession.setActionHandler('play', guard(() => playerRef.current?.playVideo()));
+        navigator.mediaSession.setActionHandler('pause', guard(() => playerRef.current?.pauseVideo()));
+        navigator.mediaSession.setActionHandler('seekbackward', (d) =>
+          guard(() => {
+            const t = playerRef.current?.getCurrentTime?.() ?? 0;
+            playerRef.current?.seekTo(Math.max(0, t - (d.seekOffset ?? 10)), true);
+          })(),
+        );
+        navigator.mediaSession.setActionHandler('seekforward', (d) =>
+          guard(() => {
+            const t = playerRef.current?.getCurrentTime?.() ?? 0;
+            playerRef.current?.seekTo(t + (d.seekOffset ?? 10), true);
+          })(),
+        );
+        navigator.mediaSession.setActionHandler('seekto', (d) =>
+          guard(() => {
+            if (d.seekTime != null) playerRef.current?.seekTo(d.seekTime, true);
+          })(),
+        );
+      } catch {
+        // Media Session not fully supported here; ignore.
+      }
+    };
+
+    const clearMediaSession = (): void => {
+      if (!('mediaSession' in navigator)) return;
+      try {
+        for (const action of ['play', 'pause', 'seekbackward', 'seekforward', 'seekto'] as const) {
+          navigator.mediaSession.setActionHandler(action, null);
+        }
+        navigator.mediaSession.playbackState = 'none';
+      } catch {
+        // ignore
+      }
+    };
+
     // Only accrue while actually playing. This makes watch time immune to
     // scrubbing forward or backward.
     const onPlaying = (): void => {
       if (playStartRef.current == null) playStartRef.current = Date.now();
       startTimers();
       maybeSeen();
+      updatePlaybackState('playing');
     };
     const onStop = (): void => {
       if (playStartRef.current != null) {
@@ -174,6 +247,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
       maybeSeen();
       flush();
       stopTimers();
+      updatePlaybackState('paused');
     };
     const onEnded = (): void => {
       onStop();
@@ -204,7 +278,9 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
           },
           events: {
             onReady: () => {
-              if (!cancelled) setStatus('ready');
+              if (cancelled) return;
+              setStatus('ready');
+              setupMediaSession();
             },
             onStateChange: (e) => {
               switch (e.data) {
@@ -243,6 +319,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
       // Finalize and flush any remaining watch time before tearing down.
       onStop();
       stopTimers();
+      clearMediaSession();
       const player = playerRef.current;
       playerRef.current = null;
       if (player && typeof player.destroy === 'function') {
