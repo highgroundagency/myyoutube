@@ -24,6 +24,7 @@ export function TopBar({ onQueryChange }: TopBarProps) {
           <HeaderLink to="/" label="Home" />
           <HeaderLink to="/history" label="History" />
           <StatsLink />
+          <AudioTestLink />
           <ThemeToggle />
         </nav>
       </div>
@@ -68,6 +69,30 @@ function StatsLink() {
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </NavLink>
+  );
+}
+
+// Temporary: reach the /audio-test capability probe from the installed PWA
+// (which has no address bar). Always visible, including on mobile.
+function AudioTestLink() {
+  return (
+    <NavLink
+      to="/audio-test"
+      aria-label="Audio test"
+      title="Audio test"
+      className={({ isActive }) =>
+        [
+          'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
+          isActive ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
+        ].join(' ')
+      }
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9 18V6l10-2v12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="16" cy="16" r="3" stroke="currentColor" strokeWidth="1.8" />
       </svg>
     </NavLink>
   );

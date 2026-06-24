@@ -11,6 +11,7 @@ const Stats = lazy(() => import('./pages/Stats').then((m) => ({ default: m.Stats
 const Channel = lazy(() => import('./pages/Channel').then((m) => ({ default: m.Channel })));
 const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
+const AudioTest = lazy(() => import('./pages/AudioTest').then((m) => ({ default: m.AudioTest })));
 
 function RouteFallback() {
   return (
@@ -24,6 +25,9 @@ export function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes>
+        {/* Standalone full screen capability probe (no app chrome). */}
+        <Route path="/audio-test" element={<AudioTest />} />
+
         <Route element={<AppLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/watch/:videoId" element={<Watch />} />
