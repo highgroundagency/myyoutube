@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getVideoById, requireApiKey } from './_youtube';
-import { YouTubeError } from '../src/lib/youtube/errors';
+import { getVideoById, requireApiKey } from './_youtube.js';
+import { YouTubeError } from '../src/lib/youtube/errors.js';
 
 export const config = { maxDuration: 30 };
 

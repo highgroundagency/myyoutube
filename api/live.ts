@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getLiveVideos, requireApiKey } from './_youtube';
-import { LIVE_CACHE_CONTROL } from '../src/config/constants';
-import { YouTubeError } from '../src/lib/youtube/errors';
-import type { LiveResponse } from '../src/lib/youtube/types';
+import { getLiveVideos, requireApiKey } from './_youtube.js';
+import { LIVE_CACHE_CONTROL } from '../src/config/constants.js';
+import { YouTubeError } from '../src/lib/youtube/errors.js';
+import type { LiveResponse } from '../src/lib/youtube/types.js';
 
 export const config = { maxDuration: 30 };
 

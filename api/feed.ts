@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildFeed, requireApiKey } from './_youtube';
-import { cacheGet, cacheSet } from './_cache';
-import { FEED_CACHE_CONTROL } from '../src/config/constants';
-import { YouTubeError } from '../src/lib/youtube/errors';
-import type { FeedResponse, ResolvedChannel, Video } from '../src/lib/youtube/types';
+import { buildFeed, requireApiKey } from './_youtube.js';
+import { cacheGet, cacheSet } from './_cache.js';
+import { FEED_CACHE_CONTROL } from '../src/config/constants.js';
+import { YouTubeError } from '../src/lib/youtube/errors.js';
+import type { FeedResponse, ResolvedChannel, Video } from '../src/lib/youtube/types.js';
 
 // Give the first (uncached) feed build room to finish on a cold start. After it
 // succeeds the CDN serves it for 30 minutes, so this longer limit is rarely used.

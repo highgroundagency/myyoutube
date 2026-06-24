@@ -9,15 +9,15 @@
  * The YouTube API key is passed in explicitly by the callers (which read it from
  * process.env). It never appears in the client bundle.
  */
-import { CHANNELS, CHANNELS_BY_KEY, UNRESOLVED_HANDLE, type ChannelConfig } from '../src/config/channels';
+import { CHANNELS, CHANNELS_BY_KEY, UNRESOLVED_HANDLE, type ChannelConfig } from '../src/config/channels.js';
 import {
   RESOLVE_CACHE_MS,
   UPLOADS_PER_CHANNEL,
   VIDEOS_LIST_CHUNK,
   YT_MAX_RETRIES,
   LIVE_CHECK_CACHE_MS,
-} from '../src/config/constants';
-import type { ResolvedChannel, Video } from '../src/lib/youtube/types';
+} from '../src/config/constants.js';
+import type { ResolvedChannel, Video } from '../src/lib/youtube/types.js';
 import {
   apiErrorSchema,
   channelSchema,
@@ -28,16 +28,16 @@ import {
   videoSchema,
   type ChannelRaw,
   type VideoRaw,
-} from '../src/lib/youtube/schemas';
+} from '../src/lib/youtube/schemas.js';
 import {
   normalizeVideo,
   normalizeVideoLoose,
   isRemovedPlaylistTitle,
   type ChannelLookup,
-} from '../src/lib/youtube/normalize';
-import { applyFilters, dedupeById, sortNewestFirst } from '../src/lib/youtube/filters';
-import { YouTubeError, classifyYouTubeReason } from '../src/lib/youtube/errors';
-import { cacheGet, cacheSet } from './_cache';
+} from '../src/lib/youtube/normalize.js';
+import { applyFilters, dedupeById, sortNewestFirst } from '../src/lib/youtube/filters.js';
+import { YouTubeError, classifyYouTubeReason } from '../src/lib/youtube/errors.js';
+import { cacheGet, cacheSet } from './_cache.js';
 
 const BASE = 'https://www.googleapis.com/youtube/v3';
 

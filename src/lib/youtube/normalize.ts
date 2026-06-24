@@ -3,10 +3,10 @@
  * shape (section 8). Returns null when essential fields are missing or the video
  * is from a channel outside our closed pool, so callers can drop it.
  */
-import type { Video, LiveState } from './types';
-import type { VideoRaw } from './schemas';
-import { parseIsoDuration } from './duration';
-import { pickThumbnail } from './thumbnails';
+import type { Video, LiveState } from './types.js';
+import type { VideoRaw } from './schemas.js';
+import { parseIsoDuration } from './duration.js';
+import { pickThumbnail } from './thumbnails.js';
 
 export type ChannelLookup = Map<string, { key: string; label: string; category?: string }>;
 

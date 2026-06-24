@@ -2,8 +2,8 @@
  * Feed filters (section 9), applied during normalization before anything reaches
  * the UI. Returns the kept videos plus drop counts for logging.
  */
-import type { Video } from './types';
-import { SHORTS_MAX_SECONDS } from '../../config/constants';
+import type { Video } from './types.js';
+import { SHORTS_MAX_SECONDS } from '../../config/constants.js';
 
 export type FilterStats = {
   shorts: number;
