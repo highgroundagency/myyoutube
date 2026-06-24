@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { m, useReducedMotion } from 'framer-motion';
 import type { Video } from '../lib/youtube/types';
 import { Badge } from './Badge';
+import { DownloadButton } from './DownloadButton';
 import { PLACEHOLDER_THUMBNAIL } from '../lib/youtube/thumbnails';
 import { formatDuration } from '../lib/youtube/duration';
 import { relativeAge, isNew, scheduledLabel } from '../lib/format';
@@ -11,6 +12,9 @@ type VideoCardProps = {
   video: Video;
   seen?: boolean;
   onToggleSeen?: (video: Video) => void;
+  /** When the laptop extractor is reachable, show a "Baixar" action. */
+  extractorOnline?: boolean;
+  downloaded?: boolean;
 };
 
 function Thumbnail({ src, alt }: { src: string; alt: string }) {
@@ -39,7 +43,13 @@ function Monogram({ label }: { label: string }) {
   );
 }
 
-export function VideoCard({ video, seen = false, onToggleSeen }: VideoCardProps) {
+export function VideoCard({
+  video,
+  seen = false,
+  onToggleSeen,
+  extractorOnline = false,
+  downloaded = false,
+}: VideoCardProps) {
   const isLive = video.liveState === 'live';
   const isUpcoming = video.liveState === 'upcoming';
   const duration = formatDuration(video.durationSeconds);
@@ -126,6 +136,11 @@ export function VideoCard({ video, seen = false, onToggleSeen }: VideoCardProps)
               </>
             )}
           </p>
+          {extractorOnline && (
+            <div className="mt-2">
+              <DownloadButton video={video} online={extractorOnline} downloaded={downloaded} variant="card" />
+            </div>
+          )}
         </div>
       </div>
     </m.article>

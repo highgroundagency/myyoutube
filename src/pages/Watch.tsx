@@ -2,8 +2,10 @@ import { useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useFeed } from '../hooks/useFeed';
 import { useVideo } from '../hooks/useVideo';
+import { useExtractorHealth, useDownloaded } from '../hooks/useExtractor';
 import { usePersistence } from '../providers/persistence';
 import { useYouTubePlayer } from '../lib/player/useYouTubePlayer';
+import { DownloadButton } from '../components/DownloadButton';
 import { RecommendedRail } from '../components/RecommendedRail';
 import { ErrorState } from '../components/ErrorState';
 import { VideoCardSkeleton } from '../components/Skeletons';
@@ -40,6 +42,8 @@ export function Watch() {
   const { videoId = '' } = useParams();
   const navigate = useNavigate();
   const feedQuery = useFeed();
+  const { online: extractorOnline } = useExtractorHealth();
+  const { isDownloaded } = useDownloaded(extractorOnline);
   const { recordProgress, markSeen, markCompleted, isSeen, addWatchSeconds } = usePersistence();
 
   const pool = feedQuery.data?.videos ?? [];
@@ -150,6 +154,16 @@ export function Watch() {
                 {video.durationSeconds > 0 && <span>{formatDuration(video.durationSeconds)}</span>}
                 {isSeen(video.id) && <span className="text-accent-600">Watched</span>}
               </div>
+              {extractorOnline && (
+                <div className="mt-3">
+                  <DownloadButton
+                    video={video}
+                    online={extractorOnline}
+                    downloaded={isDownloaded(video.id)}
+                    variant="full"
+                  />
+                </div>
+              )}
             </div>
           </>
         )}

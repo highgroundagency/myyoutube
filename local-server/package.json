@@ -1,0 +1,16 @@
+{
+  "name": "gabesvideos-local-extractor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Laptop-only download extractor for GabesVideos. Never deployed.",
+  "scripts": {
+    "go": "node go.js",
+    "server": "node server.js",
+    "setup": "node setup.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useFeed } from '../hooks/useFeed';
 import { useLive } from '../hooks/useLive';
 import { useWatchState } from '../hooks/useWatchState';
+import { useExtractorHealth, useDownloaded } from '../hooks/useExtractor';
 import { useAppSearch } from '../components/appOutletContext';
 import { VideoGrid } from '../components/VideoGrid';
 import { VideoGridSkeleton } from '../components/Skeletons';
@@ -22,6 +23,8 @@ export function Home() {
   const feedQuery = useFeed();
   const liveQuery = useLive();
   const { isSeen, markSeen, unmark } = useWatchState();
+  const { online: extractorOnline } = useExtractorHealth();
+  const { isDownloaded } = useDownloaded(extractorOnline);
   const query = useAppSearch().toLowerCase();
 
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
@@ -55,6 +58,8 @@ export function Home() {
       if (activeChannel && v.channelKey !== activeChannel) return false;
       if (query && !`${v.title} ${v.channelLabel}`.toLowerCase().includes(query)) return false;
       if (!showWatched && isSeen(v.id)) return false;
+      // Downloaded videos leave the feed (the laptop already has them).
+      if (extractorOnline && isDownloaded(v.id)) return false;
       return true;
     });
 
@@ -64,7 +69,7 @@ export function Home() {
     // just wants newest first.
     const restOrdered = activeChannel || query ? sortNewestFirst(rest) : interleaveByChannel(sortNewestFirst(rest));
     return [...live, ...restOrdered];
-  }, [merged, activeChannel, query, showWatched, isSeen]);
+  }, [merged, activeChannel, query, showWatched, isSeen, extractorOnline, isDownloaded]);
 
   const onToggleSeen = (video: Video) => {
     if (isSeen(video.id)) unmark(video.id);
@@ -107,6 +112,15 @@ export function Home() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ChannelChips channels={channelChips} active={activeChannel} onSelect={setActiveChannel} />
         <div className="flex shrink-0 items-center gap-2">
+          {extractorOnline && (
+            <span
+              title="O extrator no laptop esta conectado. Toque em Baixar em um video."
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Modo download
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowWatched((s) => !s)}
@@ -158,7 +172,13 @@ export function Home() {
         )
       ) : (
         <>
-          <VideoGrid videos={visibleVideos} isSeen={isSeen} onToggleSeen={onToggleSeen} />
+          <VideoGrid
+            videos={visibleVideos}
+            isSeen={isSeen}
+            onToggleSeen={onToggleSeen}
+            extractorOnline={extractorOnline}
+            isDownloaded={isDownloaded}
+          />
           {visible < display.length && (
             <div className="mt-8 flex justify-center">
               <button

@@ -1,0 +1,2 @@
+# The local download extractor is a laptop-only tool. Never deploy it to Vercel.
+local-server
