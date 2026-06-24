@@ -118,8 +118,11 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,woff}'],
-        // Never let SPA navigation fallback swallow API routes.
-        navigateFallbackDenylist: [/^\/api/],
+        // Never let the SPA navigation fallback swallow API routes or the local
+        // extractor routes. A "Baixar" click navigates to /download, which is a
+        // navigation request; without this the service worker would serve the
+        // app shell instead of streaming the file, breaking the download.
+        navigateFallbackDenylist: [/^\/api/, /^\/download/, /^\/health/, /^\/downloaded/, /^\/info/],
         runtimeCaching: [
           {
             // NetworkFirst for /api: try the network, fall back to a short cache.
