@@ -28,6 +28,8 @@ function devApiPlugin(mode: string): Plugin {
         '/api/feed': '/api/feed.ts',
         '/api/live': '/api/live.ts',
         '/api/video': '/api/video.ts',
+        '/api/playlist': '/api/playlist.ts',
+        '/api/comments': '/api/comments.ts',
       };
 
       server.middlewares.use(async (req, res, next) => {

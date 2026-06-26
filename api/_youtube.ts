@@ -17,10 +17,11 @@ import {
   YT_MAX_RETRIES,
   LIVE_CHECK_CACHE_MS,
 } from '../src/config/constants.js';
-import type { ResolvedChannel, Video } from '../src/lib/youtube/types.js';
+import type { CommentsResult, ResolvedChannel, Video, VideoComment } from '../src/lib/youtube/types.js';
 import {
   apiErrorSchema,
   channelSchema,
+  commentThreadSchema,
   listResponseSchema,
   parseValidItems,
   playlistItemSchema,
@@ -36,6 +37,7 @@ import {
   type ChannelLookup,
 } from '../src/lib/youtube/normalize.js';
 import { applyFilters, dedupeById, sortNewestFirst } from '../src/lib/youtube/filters.js';
+import { passesCuration, uploadFetchLimit } from '../src/lib/youtube/curation.js';
 import { YouTubeError, classifyYouTubeReason } from '../src/lib/youtube/errors.js';
 import { cacheGet, cacheSet } from './_cache.js';
 
@@ -281,23 +283,40 @@ export async function resolveAllChannels(apiKey: string): Promise<ResolvedChanne
 // Uploads and details (section 7)
 // ---------------------------------------------------------------------------
 
-/** Newest uploads for a channel. Skips deleted and private placeholder items. */
-async function fetchRecentUploadIds(uploadsPlaylistId: string, apiKey: string): Promise<string[]> {
-  const data = await ytFetch(
-    'playlistItems',
-    { part: 'contentDetails,snippet', playlistId: uploadsPlaylistId, maxResults: String(UPLOADS_PER_CHANNEL) },
-    apiKey,
-  );
-  const list = listResponseSchema.safeParse(data);
-  const items = parseValidItems(playlistItemSchema, list.success ? list.data.items : []);
-
+/**
+ * Video ids from a playlist, in playlist order, up to `limit`. Paginates with
+ * pageToken (50 per call) so a channel can pull its full history, and skips
+ * deleted/private placeholder items. Used for both channel uploads and the
+ * learning playlists.
+ */
+async function fetchPlaylistVideoIds(playlistId: string, apiKey: string, limit: number): Promise<string[]> {
   const ids: string[] = [];
-  for (const item of items) {
-    if (isRemovedPlaylistTitle(item.snippet?.title)) continue;
-    const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId;
-    if (videoId) ids.push(videoId);
+  let pageToken: string | undefined;
+
+  while (ids.length < limit) {
+    const params: Record<string, string> = {
+      part: 'contentDetails,snippet',
+      playlistId,
+      maxResults: String(Math.min(50, limit - ids.length)),
+    };
+    if (pageToken) params.pageToken = pageToken;
+
+    const data = await ytFetch('playlistItems', params, apiKey);
+    const list = listResponseSchema.safeParse(data);
+    const items = parseValidItems(playlistItemSchema, list.success ? list.data.items : []);
+
+    for (const item of items) {
+      if (isRemovedPlaylistTitle(item.snippet?.title)) continue;
+      const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId;
+      if (videoId) ids.push(videoId);
+    }
+
+    const next = list.success ? list.data.nextPageToken : undefined;
+    if (!next || items.length === 0) break;
+    pageToken = next;
   }
-  return ids;
+
+  return ids.slice(0, limit);
 }
 
 /**
@@ -353,14 +372,15 @@ export async function buildFeed(apiKey: string): Promise<{ videos: Video[]; reso
 
   const withUploads = resolved.filter((r) => r.uploadsPlaylistId);
   const idGroups = await Promise.all(
-    withUploads.map((r) =>
-      fetchRecentUploadIds(r.uploadsPlaylistId as string, apiKey).catch((e) => {
+    withUploads.map((r) => {
+      const limit = uploadFetchLimit(CHANNELS_BY_KEY[r.key]?.curation, UPLOADS_PER_CHANNEL);
+      return fetchPlaylistVideoIds(r.uploadsPlaylistId as string, apiKey, limit).catch((e) => {
         // One channel failing must not kill the whole feed.
         if (e instanceof YouTubeError && (e.isQuota || e.isKeyProblem)) throw e;
         console.error(`[feed] uploads failed for ${r.key}:`, e);
         return [] as string[];
-      }),
-    ),
+      });
+    }),
   );
 
   const allIds = Array.from(new Set(idGroups.flat()));
@@ -371,7 +391,10 @@ export async function buildFeed(apiKey: string): Promise<{ videos: Video[]; reso
     const rawVideo = details.get(id);
     if (!rawVideo) continue; // videos.list omitted it: deleted, private, or region blocked.
     const video = normalizeVideo(rawVideo, lookup);
-    if (video) normalized.push(video);
+    if (!video) continue;
+    // Per-channel curation: new-only, title match, etc. Live/upcoming exempt.
+    if (!passesCuration(video, CHANNELS_BY_KEY[video.channelKey]?.curation)) continue;
+    normalized.push(video);
   }
 
   const { videos: filtered } = applyFilters(normalized);
@@ -391,6 +414,93 @@ export async function getVideoById(apiKey: string, id: string): Promise<Video | 
   // Prefer the pool-scoped normalize; fall back to loose so a valid direct link
   // (an older upload, or a guest video) still plays.
   return normalizeVideo(raw, lookup) ?? normalizeVideoLoose(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Learning playlists (the gamified course pages)
+// ---------------------------------------------------------------------------
+
+const PLAYLIST_MAX = 200;
+
+/** Videos of a playlist in playlist order (the lesson order), cached. */
+export async function getPlaylistVideos(apiKey: string, playlistId: string): Promise<Video[]> {
+  const cacheKey = `playlist:${playlistId}`;
+  const cached = cacheGet<Video[]>(cacheKey);
+  if (cached) return cached;
+
+  const ids = await fetchPlaylistVideoIds(playlistId, apiKey, PLAYLIST_MAX);
+  const details = await fetchVideoDetails(ids, apiKey);
+
+  // Preserve playlist order (the lesson order), unlike the newest-first feed.
+  const videos: Video[] = [];
+  for (const id of ids) {
+    const raw = details.get(id);
+    if (!raw) continue;
+    const v = normalizeVideoLoose(raw);
+    if (v) videos.push(v);
+  }
+
+  cacheSet(cacheKey, videos, RESOLVE_CACHE_MS);
+  return videos;
+}
+
+// ---------------------------------------------------------------------------
+// Comments (a few per video, to liven up the cards)
+// ---------------------------------------------------------------------------
+
+const COMMENTS_CACHE_MS = 60 * 60 * 1000;
+
+/** Top comments for a video (relevance ordered). Returns disabled:true on 403/404. */
+export async function getVideoComments(apiKey: string, videoId: string, max: number): Promise<CommentsResult> {
+  const cacheKey = `comments:${videoId}:${max}`;
+  const cached = cacheGet<CommentsResult>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const data = await ytFetch(
+      'commentThreads',
+      {
+        part: 'snippet',
+        videoId,
+        order: 'relevance',
+        maxResults: String(max),
+        textFormat: 'plainText',
+      },
+      apiKey,
+    );
+    const list = listResponseSchema.safeParse(data);
+    const items = parseValidItems(commentThreadSchema, list.success ? list.data.items : []);
+
+    const comments: VideoComment[] = [];
+    for (const it of items) {
+      const top = it.snippet?.topLevelComment;
+      const snip = top?.snippet;
+      const text = (snip?.textOriginal ?? snip?.textDisplay ?? '').trim();
+      if (!text) continue;
+      comments.push({
+        id: top?.id ?? it.id ?? `${videoId}:${comments.length}`,
+        author: snip?.authorDisplayName ?? 'Anonimo',
+        authorImage: snip?.authorProfileImageUrl ?? null,
+        text,
+        likeCount: snip?.likeCount ?? 0,
+      });
+    }
+
+    const result: CommentsResult = { comments, disabled: false };
+    cacheSet(cacheKey, result, COMMENTS_CACHE_MS);
+    return result;
+  } catch (e) {
+    // Global problems propagate; a per-video 403/404 just means no comments.
+    if (e instanceof YouTubeError) {
+      if (e.isQuota || e.isKeyProblem) throw e;
+      if (e.status === 403 || e.status === 404) {
+        const result: CommentsResult = { comments: [], disabled: true };
+        cacheSet(cacheKey, result, COMMENTS_CACHE_MS);
+        return result;
+      }
+    }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------

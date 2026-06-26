@@ -4,6 +4,9 @@ import { m, useReducedMotion } from 'framer-motion';
 import type { Video } from '../lib/youtube/types';
 import { Badge } from './Badge';
 import { DownloadButton } from './DownloadButton';
+import { CommentPreview } from './CommentPreview';
+import { useInView } from '../hooks/useInView';
+import { useComments } from '../hooks/useComments';
 import { PLACEHOLDER_THUMBNAIL } from '../lib/youtube/thumbnails';
 import { formatDuration } from '../lib/youtube/duration';
 import { relativeAge, isNew, scheduledLabel } from '../lib/format';
@@ -15,6 +18,8 @@ type VideoCardProps = {
   /** When the laptop extractor is reachable, show a "Baixar" action. */
   extractorOnline?: boolean;
   downloaded?: boolean;
+  /** Show a couple of top comments (lazy, once the card scrolls into view). */
+  showComments?: boolean;
 };
 
 function Thumbnail({ src, alt }: { src: string; alt: string }) {
@@ -49,16 +54,24 @@ export function VideoCard({
   onToggleSeen,
   extractorOnline = false,
   downloaded = false,
+  showComments = false,
 }: VideoCardProps) {
   const isLive = video.liveState === 'live';
   const isUpcoming = video.liveState === 'upcoming';
   const duration = formatDuration(video.durationSeconds);
   const reduceMotion = useReducedMotion();
 
+  // Lazily load a couple of comments once the card scrolls into view, to keep
+  // the feed lively without spending quota on cards nobody reaches.
+  const { ref: inViewRef, inView } = useInView<HTMLElement>();
+  const commentsEnabled = showComments && inView && !isUpcoming;
+  const commentsQuery = useComments(video.id, commentsEnabled);
+
   const handleToggle = () => onToggleSeen?.(video);
 
   return (
     <m.article
+      ref={inViewRef}
       initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
@@ -143,6 +156,15 @@ export function VideoCard({
           )}
         </div>
       </div>
+
+      {showComments && (
+        <CommentPreview
+          comments={commentsQuery.data?.comments ?? []}
+          disabled={commentsQuery.data?.disabled}
+          loading={commentsEnabled && commentsQuery.isLoading}
+          variant="card"
+        />
+      )}
     </m.article>
   );
 }

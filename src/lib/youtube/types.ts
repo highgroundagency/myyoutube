@@ -36,6 +36,21 @@ export type Video = {
   regionRestriction?: RegionRestriction;
 };
 
+/** A single top-level comment, shown on cards and the watch page. */
+export type VideoComment = {
+  id: string;
+  author: string;
+  authorImage: string | null;
+  text: string;
+  likeCount: number;
+};
+
+/** Response shape of GET /api/comments. */
+export type CommentsResult = { comments: VideoComment[]; disabled: boolean };
+
+/** Response shape of GET /api/playlist. */
+export type PlaylistResponse = { playlistId: string; videos: Video[]; mock?: boolean };
+
 /** How a channel handle was resolved (for the resolution report and feed payload). */
 export type ResolveMethod = 'id' | 'handle' | 'handle-no-at' | 'search' | 'failed';
 

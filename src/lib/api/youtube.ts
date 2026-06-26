@@ -21,7 +21,13 @@ import {
   resolvedChannelSchema,
 } from '../youtube/schemas';
 import { YouTubeError } from '../youtube/errors';
-import type { FeedResponse, LiveResponse, Video } from '../youtube/types';
+import type {
+  CommentsResult,
+  FeedResponse,
+  LiveResponse,
+  Video,
+  VideoComment,
+} from '../youtube/types';
 
 const NOTICE_NO_KEY = 'No API key set on the server. Showing sample videos.';
 const NOTICE_API_UNAVAILABLE = 'The video service is not available right now. Showing sample videos.';
@@ -151,5 +157,56 @@ export async function fetchVideo(id: string, signal?: AbortSignal): Promise<Vide
   } catch (err) {
     if (IS_DEV) return fromMock();
     throw err;
+  }
+}
+
+function coerceComment(value: unknown): VideoComment | null {
+  if (value == null || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.text !== 'string' || !o.text.trim()) return null;
+  return {
+    id: typeof o.id === 'string' ? o.id : o.text.slice(0, 24),
+    author: typeof o.author === 'string' ? o.author : 'Anonimo',
+    authorImage: typeof o.authorImage === 'string' ? o.authorImage : null,
+    text: o.text,
+    likeCount: typeof o.likeCount === 'number' ? o.likeCount : 0,
+  };
+}
+
+/**
+ * A few top comments for a video. Non-essential: any failure (no key, quota,
+ * disabled comments, dev with no /api) degrades to an empty list, never throws.
+ */
+export async function fetchComments(videoId: string, signal?: AbortSignal): Promise<CommentsResult> {
+  const empty: CommentsResult = { comments: [], disabled: false };
+  if (MOCK_MODE) return empty;
+
+  try {
+    const res = await getResponse(`/api/comments?v=${encodeURIComponent(videoId)}&max=5`, signal);
+    if (!res.ok) return empty;
+    const json = await readJson(res);
+    if (!isJsonObject(json)) return empty;
+    const rawComments = Array.isArray(json.comments) ? json.comments : [];
+    return {
+      comments: rawComments.map(coerceComment).filter((c): c is VideoComment => c != null),
+      disabled: Boolean(json.disabled),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/** Videos of a learning playlist, in lesson order. Empty on any failure. */
+export async function fetchPlaylist(playlistId: string, signal?: AbortSignal): Promise<Video[]> {
+  if (MOCK_MODE) return [];
+
+  try {
+    const res = await getResponse(`/api/playlist?id=${encodeURIComponent(playlistId)}`, signal);
+    if (!res.ok) return [];
+    const json = await readJson(res);
+    if (!isJsonObject(json)) return [];
+    return parseValidItems(canonicalVideoSchema, json.videos);
+  } catch {
+    return [];
   }
 }

@@ -1,11 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useFeed } from '../hooks/useFeed';
 import { useVideo } from '../hooks/useVideo';
 import { useExtractorHealth, useDownloaded } from '../hooks/useExtractor';
+import { useComments } from '../hooks/useComments';
 import { usePersistence } from '../providers/persistence';
 import { useYouTubePlayer } from '../lib/player/useYouTubePlayer';
 import { DownloadButton } from '../components/DownloadButton';
+import { CommentPreview } from '../components/CommentPreview';
 import { RecommendedRail } from '../components/RecommendedRail';
 import { ErrorState } from '../components/ErrorState';
 import { VideoCardSkeleton } from '../components/Skeletons';
@@ -44,7 +46,14 @@ export function Watch() {
   const feedQuery = useFeed();
   const { online: extractorOnline } = useExtractorHealth();
   const { isDownloaded } = useDownloaded(extractorOnline);
+  const commentsQuery = useComments(videoId, Boolean(videoId));
   const { recordProgress, markSeen, markCompleted, isSeen, addWatchSeconds } = usePersistence();
+
+  // Jump to the top so the player is in view the moment a video opens, instead
+  // of keeping the feed's scroll position from where the card was tapped.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [videoId]);
 
   const pool = feedQuery.data?.videos ?? [];
   const poolVideo = pool.find((v) => v.id === videoId);
@@ -83,6 +92,7 @@ export function Watch() {
     videoId,
     durationSeconds: video?.durationSeconds ?? 0,
     enabled: playable,
+    autoplay: true,
     onSeen,
     onFurthest,
     onCompleted,
@@ -164,6 +174,12 @@ export function Watch() {
                   />
                 </div>
               )}
+              <CommentPreview
+                comments={commentsQuery.data?.comments ?? []}
+                disabled={commentsQuery.data?.disabled}
+                loading={commentsQuery.isLoading}
+                variant="full"
+              />
             </div>
           </>
         )}

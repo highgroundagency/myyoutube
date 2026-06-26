@@ -27,6 +27,8 @@ type UseYouTubePlayerArgs = {
   onError?: (code: number) => void;
   /** Metadata for the lock screen / notification (Media Session API). */
   media?: { title: string; channelLabel: string; thumbnailUrl: string };
+  /** Start playing as soon as the player is ready (follows the user's click). */
+  autoplay?: boolean;
 };
 
 export type UseYouTubePlayerResult = {
@@ -275,12 +277,22 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
             rel: 0,
             modestbranding: 1,
             origin: window.location.origin,
+            autoplay: argsRef.current.autoplay ? 1 : 0,
           },
           events: {
             onReady: () => {
               if (cancelled) return;
               setStatus('ready');
               setupMediaSession();
+              // Following a user click (navigation), ask the player to start.
+              // Browsers that block autosound will stay paused until a tap.
+              if (argsRef.current.autoplay) {
+                try {
+                  playerRef.current?.playVideo();
+                } catch {
+                  // ignore: a tap will start it
+                }
+              }
             },
             onStateChange: (e) => {
               switch (e.data) {

@@ -72,6 +72,31 @@ export const videoSchema = z.object({
 });
 export type VideoRaw = z.infer<typeof videoSchema>;
 
+// ----- commentThreads.list --------------------------------------------------
+
+export const commentThreadSchema = z.object({
+  id: z.string().optional(),
+  snippet: z
+    .object({
+      topLevelComment: z
+        .object({
+          id: z.string().optional(),
+          snippet: z
+            .object({
+              textOriginal: z.string().optional(),
+              textDisplay: z.string().optional(),
+              authorDisplayName: z.string().optional(),
+              authorProfileImageUrl: z.string().optional(),
+              likeCount: z.number().optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+export type CommentThreadRaw = z.infer<typeof commentThreadSchema>;
+
 // ----- channels.list (resolution) -------------------------------------------
 
 export const channelSchema = z.object({

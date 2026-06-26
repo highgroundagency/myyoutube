@@ -13,6 +13,22 @@
 
 export type ChannelCategory = 'entertainment' | 'health' | 'language' | 'faith' | 'sports';
 
+/**
+ * Per-channel curation. Lets a channel show its full history, only new uploads,
+ * or only videos whose title matches a keyword. Live and upcoming videos are
+ * always exempt from these filters.
+ */
+export type ChannelCuration = {
+  /** Fetch the full upload history (paginated, capped), not just the latest page. */
+  fetchAll?: boolean;
+  /** Explicit cap on uploads to fetch for this channel. */
+  maxVideos?: number;
+  /** Only keep videos published on or after this ISO date. */
+  publishedAfter?: string;
+  /** Only keep videos whose title contains one of these (accent/case insensitive). */
+  titleIncludesAny?: string[];
+};
+
 export type ChannelConfig = {
   /** Internal stable id, used for joins and stats. Never changes. */
   key: string;
@@ -32,16 +48,32 @@ export type ChannelConfig = {
   expectedTitleIncludes?: string;
   /** Run the eventType=live check for this channel (costs 100 units, cache it). */
   liveCheck?: boolean;
+  /** Optional curation rules for what this channel contributes to the feed. */
+  curation?: ChannelCuration;
   category?: ChannelCategory;
 };
 
 export const CHANNELS: ChannelConfig[] = [
-  { key: 'mrbeast', handle: '@MrBeast', label: 'MrBeast', category: 'entertainment' },
+  // Only show new MrBeast uploads from this date on; his back catalog is hidden.
+  {
+    key: 'mrbeast',
+    handle: '@MrBeast',
+    label: 'MrBeast',
+    category: 'entertainment',
+    curation: { publishedAfter: '2026-06-26T00:00:00.000Z' },
+  },
   { key: 'mrbeastgaming', handle: '@MrBeastGaming', label: 'MrBeast Gaming', category: 'entertainment' },
-  { key: 'bryanjohnson', handle: '@bryanjohnson', label: 'Bryan Johnson', category: 'health' },
-  { key: 'cazetv', handle: '@CazeTV', label: 'Caze TV', category: 'sports', liveCheck: true },
-  // Resolved by search (no handle needed).
-  { key: 'mandarin', label: 'Mandarin Corner', searchName: 'Mandarin Corner', category: 'language' },
+  // Pull Bryan Johnson's full catalog, not just the latest page.
+  { key: 'bryanjohnson', handle: '@bryanjohnson', label: 'Bryan Johnson', category: 'health', curation: { fetchAll: true } },
+  // Caze TV: only "melhores momentos" highlights in the feed; live arrives via the live check.
+  {
+    key: 'cazetv',
+    handle: '@CazeTV',
+    label: 'Caze TV',
+    category: 'sports',
+    liveCheck: true,
+    curation: { titleIncludesAny: ['melhores momentos'] },
+  },
   { key: 'josephprince', handle: '@JosephPrince', label: 'Joseph Prince', category: 'faith' },
   // Resolved directly by id, verified against the expected teaching channel title.
   // If the id ever returns a different channel, it falls back to searching the name.
