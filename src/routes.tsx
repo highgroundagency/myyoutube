@@ -11,6 +11,7 @@ const Stats = lazy(() => import('./pages/Stats').then((m) => ({ default: m.Stats
 const Channel = lazy(() => import('./pages/Channel').then((m) => ({ default: m.Channel })));
 const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
 const Learn = lazy(() => import('./pages/Learn').then((m) => ({ default: m.Learn })));
+const Downloads = lazy(() => import('./pages/Downloads').then((m) => ({ default: m.Downloads })));
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 const AudioTest = lazy(() => import('./pages/AudioTest').then((m) => ({ default: m.AudioTest })));
 
@@ -34,6 +35,7 @@ export function AppRoutes() {
           <Route path="/watch/:videoId" element={<Watch />} />
           <Route path="/channel/:channelKey" element={<Channel />} />
           <Route path="/learn/:courseKey" element={<Learn />} />
+          <Route path="/baixar" element={<Downloads />} />
           <Route path="/history" element={<History />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="*" element={<NotFound />} />

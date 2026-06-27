@@ -93,3 +93,61 @@ export function useDownloaded(enabled: boolean) {
     refetch: query.refetch,
   };
 }
+
+// ----- Batch downloads (paste many links, download to the laptop) -----------
+
+export type DownloadFormat = 'video' | 'audio';
+export type DownloadJobStatus = 'queued' | 'downloading' | 'done' | 'error';
+
+export type DownloadJob = {
+  id: string;
+  title: string;
+  format: DownloadFormat;
+  status: DownloadJobStatus;
+  error?: string;
+  queuedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+export type QueueResult = {
+  accepted: { id: string; status: DownloadJobStatus }[];
+  invalid: string[];
+};
+
+/** Queue a batch of video ids on the laptop extractor. */
+export async function queueDownloads(
+  ids: string[],
+  format: DownloadFormat = 'video',
+): Promise<QueueResult> {
+  const res = await fetch('/downloads', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ urls: ids, format }),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`A fila recusou o pedido (${res.status}).`);
+  const json = (await res.json()) as Partial<QueueResult>;
+  return {
+    accepted: Array.isArray(json.accepted) ? json.accepted : [],
+    invalid: Array.isArray(json.invalid) ? json.invalid : [],
+  };
+}
+
+/** Live status of the batch download queue (polled while the page is open). */
+export function useDownloadJobs(enabled: boolean) {
+  const query = useQuery({
+    queryKey: ['extractor', 'jobs'],
+    queryFn: async ({ signal }) => {
+      const json = await fetchJson('/jobs', signal);
+      const jobs = (json as { jobs?: unknown })?.jobs;
+      return Array.isArray(jobs) ? (jobs as DownloadJob[]) : [];
+    },
+    enabled,
+    staleTime: 1000,
+    refetchInterval: enabled ? 2000 : false,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  return { jobs: query.data ?? [], refetch: query.refetch };
+}

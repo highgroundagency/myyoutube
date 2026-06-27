@@ -24,6 +24,7 @@ export function TopBar({ onQueryChange }: TopBarProps) {
           <HeaderLink to="/" label="Home" />
           <HeaderLink to="/history" label="History" />
           <LearnLink />
+          <DownloadsLink />
           <StatsLink />
           <AudioTestLink />
           <ThemeToggle />
@@ -73,6 +74,27 @@ function LearnLink() {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M22 10 12 5 2 10l10 5 10-5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         <path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </NavLink>
+  );
+}
+
+// Bulk "download by link" page. Reachable on mobile / in the installed PWA.
+function DownloadsLink() {
+  return (
+    <NavLink
+      to="/baixar"
+      aria-label="Baixar por link"
+      title="Baixar por link"
+      className={({ isActive }) =>
+        [
+          'flex h-9 w-9 items-center justify-center rounded-lg transition-colors',
+          isActive ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
+        ].join(' ')
+      }
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </NavLink>
   );

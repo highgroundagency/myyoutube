@@ -14,8 +14,115 @@ function isValidVideoId(id) {
   return VIDEO_ID_RE.test(id);
 }
 
+/**
+ * Pull an 11-char YouTube video id out of a pasted link or bare id. Handles
+ * watch?v=, youtu.be/, shorts/, live/, embed/, and surrounding junk. Returns
+ * null when nothing valid is found.
+ */
+function parseVideoId(input) {
+  const s = String(input || '').trim();
+  if (!s) return null;
+  if (VIDEO_ID_RE.test(s)) return s;
+  try {
+    const u = new URL(s.includes('://') ? s : `https://${s}`);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1, 12);
+      return VIDEO_ID_RE.test(id) ? id : null;
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      const v = u.searchParams.get('v');
+      if (v && VIDEO_ID_RE.test(v)) return v;
+      const m = u.pathname.match(/\/(?:shorts|live|embed|v)\/([A-Za-z0-9_-]{11})/);
+      if (m) return m[1];
+    }
+  } catch {
+    // not a URL; fall through to a loose scan
+  }
+  const loose = s.match(/(?:v=|youtu\.be\/|shorts\/|live\/|embed\/)([A-Za-z0-9_-]{11})/);
+  return loose ? loose[1] : null;
+}
+
 /** De-duplicate concurrent downloads of the same video+format. */
 const inFlight = new Map();
+
+// ----- Batch download queue (paste many links, download to the laptop) -------
+
+const MAX_CONCURRENT = 2;
+/** videoId -> { id, title, format, status, error, queuedAt, startedAt, finishedAt } */
+const jobs = new Map();
+const queue = [];
+let active = 0;
+
+function jobView() {
+  return [...jobs.values()].sort((a, b) => String(b.queuedAt).localeCompare(String(a.queuedAt)));
+}
+
+/** Keep the job list from growing without bound. */
+function pruneJobs() {
+  const finished = jobView().filter((j) => j.status === 'done' || j.status === 'error');
+  for (const j of finished.slice(40)) jobs.delete(j.id);
+}
+
+async function runJob(job, format) {
+  job.status = 'downloading';
+  job.startedAt = new Date().toISOString();
+  try {
+    // Best effort metadata for a nicer label and duration; ignore if it fails.
+    let meta = { title: job.title, channel: '', durationSeconds: 0 };
+    try {
+      const info = await getVideoInfo(job.id);
+      meta = { title: info.title, channel: info.channel, durationSeconds: info.durationSeconds };
+      job.title = info.title;
+    } catch {
+      // metadata probe failed; the download itself may still work
+    }
+    await ensureDownloaded(job.id, format, meta);
+    job.status = 'done';
+  } catch (err) {
+    job.status = 'error';
+    job.error = String(err?.message || err);
+  } finally {
+    job.finishedAt = new Date().toISOString();
+  }
+}
+
+function pump() {
+  while (active < MAX_CONCURRENT && queue.length > 0) {
+    const { job, format } = queue.shift();
+    active += 1;
+    runJob(job, format).finally(() => {
+      active -= 1;
+      pruneJobs();
+      pump();
+    });
+  }
+}
+
+/** Queue a video id for download. Returns the (new or existing) job. */
+function enqueue(videoId, format) {
+  const existing = jobs.get(videoId);
+  if (existing && (existing.status === 'queued' || existing.status === 'downloading')) {
+    return existing;
+  }
+  if (getEntry(videoId)) {
+    const done = {
+      id: videoId,
+      title: getEntry(videoId)?.title || videoId,
+      format,
+      status: 'done',
+      queuedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+    };
+    jobs.set(videoId, done);
+    return done;
+  }
+  const job = { id: videoId, title: videoId, format, status: 'queued', queuedAt: new Date().toISOString() };
+  jobs.set(videoId, job);
+  queue.push({ job, format });
+  pump();
+  return job;
+}
 
 async function ensureDownloaded(videoId, format, meta) {
   const existing = getEntry(videoId);
@@ -80,6 +187,7 @@ export async function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.disable('etag');
+  app.use(express.json({ limit: '256kb' }));
 
   // Health: the app checks for `extractor: true` so the Vercel SPA fallback
   // (which returns 200 HTML for unknown paths) cannot be mistaken for us.
@@ -100,6 +208,42 @@ export async function createApp() {
     res.setHeader('Cache-Control', 'no-store');
     const items = listEntries();
     res.json({ ids: items.map((e) => e.id), items });
+  });
+
+  // Queue a batch of pasted links/ids to download to the laptop. Returns what
+  // was accepted, skipped (already downloaded/queued), and not understood.
+  app.post('/downloads', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const body = req.body ?? {};
+    const format = body.format === 'audio' ? 'audio' : 'video';
+    const raw = Array.isArray(body.urls)
+      ? body.urls
+      : typeof body.text === 'string'
+        ? body.text.split(/[\s,]+/)
+        : [];
+    const accepted = [];
+    const invalid = [];
+    const seen = new Set();
+    for (const item of raw) {
+      const trimmed = String(item || '').trim();
+      if (!trimmed) continue;
+      const id = parseVideoId(trimmed);
+      if (!id) {
+        invalid.push(trimmed);
+        continue;
+      }
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const job = enqueue(id, format);
+      accepted.push({ id: job.id, status: job.status });
+    }
+    res.json({ accepted, invalid, jobs: jobView() });
+  });
+
+  // Live status of the batch queue (the page polls this).
+  app.get('/jobs', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ jobs: jobView(), active, queued: queue.length });
   });
 
   // Lightweight metadata probe for a single video.
