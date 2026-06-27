@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { useDailyStats } from '../hooks/useDailyStats';
 import { useWatchState } from '../hooks/useWatchState';
+import { TimeSavedCard } from '../components/TimeSavedCard';
 import {
   buildSeries,
   computeStreak,
@@ -51,6 +52,8 @@ export function Stats() {
           Time spent on the channels you chose, framed as intentional, learned time.
         </p>
       </header>
+
+      <TimeSavedCard />
 
       {!hasData && (
         <p className="mb-6 rounded-lg border border-line bg-surface px-4 py-3 text-sm text-fg-muted">

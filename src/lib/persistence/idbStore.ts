@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval';
 import type {
+  AppMeta,
   DailyStats,
   WatchRecord,
   WatchRecords,
@@ -21,6 +22,7 @@ import { localDayKey } from './types';
 
 const WATCH_KEY = 'gv-watch-state';
 const STATS_KEY = 'gv-daily-stats';
+const META_KEY = 'gv-meta';
 
 type Listener = () => void;
 
@@ -32,6 +34,7 @@ function mergeStatus(prev: WatchStatus | undefined, next: WatchStatus): WatchSta
 class PersistenceStore {
   private watch: WatchRecords = {};
   private stats: DailyStats = {};
+  private meta: AppMeta = {};
   private listeners = new Set<Listener>();
   private initPromise: Promise<void> | null = null;
 
@@ -44,9 +47,14 @@ class PersistenceStore {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
       try {
-        const [w, s] = await Promise.all([get<WatchRecords>(WATCH_KEY), get<DailyStats>(STATS_KEY)]);
+        const [w, s, m] = await Promise.all([
+          get<WatchRecords>(WATCH_KEY),
+          get<DailyStats>(STATS_KEY),
+          get<AppMeta>(META_KEY),
+        ]);
         if (w && typeof w === 'object') this.watch = w;
         if (s && typeof s === 'object') this.stats = s;
+        if (m && typeof m === 'object') this.meta = m;
       } catch {
         // IndexedDB unavailable (private mode, sandbox): stay in-memory only.
       }
@@ -64,6 +72,7 @@ class PersistenceStore {
 
   getWatchSnapshot = (): WatchRecords => this.watch;
   getStatsSnapshot = (): DailyStats => this.stats;
+  getMetaSnapshot = (): AppMeta => this.meta;
 
   private emit(): void {
     for (const listener of this.listeners) listener();
@@ -79,6 +88,10 @@ class PersistenceStore {
     void set(STATS_KEY, this.stats).catch(() => {});
   }
 
+  private persistMeta(): void {
+    void set(META_KEY, this.meta).catch(() => {});
+  }
+
   // ----- watch state mutations -----
 
   /**
@@ -88,10 +101,19 @@ class PersistenceStore {
   upsertWatch(input: WatchUpsert): WatchRecord {
     const now = new Date().toISOString();
     const existing = this.watch[input.videoId];
+    // resumeDismissed: an explicit flag always wins; otherwise recording a fresh
+    // position means the viewer is actively watching again, so un-dismiss it.
+    const resumeDismissed =
+      input.resumeDismissed ??
+      (input.lastPositionSeconds != null ? false : existing?.resumeDismissed);
     const record: WatchRecord = {
       videoId: input.videoId,
       status: mergeStatus(existing?.status, input.status),
       watchedSeconds: Math.max(existing?.watchedSeconds ?? 0, input.watchedSeconds ?? 0),
+      // Latest position wins (it can move backward when scrubbing), unlike the
+      // monotonic watchedSeconds above.
+      lastPositionSeconds: input.lastPositionSeconds ?? existing?.lastPositionSeconds,
+      resumeDismissed,
       channelKey: input.channelKey ?? existing?.channelKey,
       category: input.category ?? existing?.category,
       durationSeconds: input.durationSeconds ?? existing?.durationSeconds,
@@ -105,6 +127,50 @@ class PersistenceStore {
     this.persistWatch();
     this.emit();
     return record;
+  }
+
+  /**
+   * Mark many videos as seen in a single update (one persist, one re-render).
+   * Never downgrades an existing completed/seen record, and does not bump
+   * lastWatchedAt for videos already in history.
+   */
+  markManySeen(items: WatchUpsert[]): void {
+    if (items.length === 0) return;
+    const now = new Date().toISOString();
+    const next = { ...this.watch };
+    for (const item of items) {
+      const existing = next[item.videoId];
+      next[item.videoId] = {
+        videoId: item.videoId,
+        status: existing?.status ?? 'seen',
+        watchedSeconds: existing?.watchedSeconds ?? 0,
+        lastPositionSeconds: existing?.lastPositionSeconds,
+        resumeDismissed: existing?.resumeDismissed,
+        channelKey: item.channelKey ?? existing?.channelKey,
+        category: item.category ?? existing?.category,
+        durationSeconds: item.durationSeconds ?? existing?.durationSeconds,
+        title: item.title ?? existing?.title,
+        thumbnailUrl: item.thumbnailUrl ?? existing?.thumbnailUrl,
+        channelLabel: item.channelLabel ?? existing?.channelLabel,
+        firstWatchedAt: existing?.firstWatchedAt ?? now,
+        lastWatchedAt: existing?.lastWatchedAt ?? now,
+      };
+    }
+    this.watch = next;
+    this.persistWatch();
+    this.emit();
+  }
+
+  /** Hide a video from the "continue watching" rail without losing its history. */
+  dismissResume(videoId: string): void {
+    const existing = this.watch[videoId];
+    if (!existing || existing.resumeDismissed) return;
+    this.watch = {
+      ...this.watch,
+      [videoId]: { ...existing, resumeDismissed: true },
+    };
+    this.persistWatch();
+    this.emit();
   }
 
   removeWatch(videoId: string): void {
@@ -143,6 +209,15 @@ class PersistenceStore {
   clearStats(): void {
     this.stats = {};
     this.persistStats();
+    this.emit();
+  }
+
+  // ----- app meta -----
+
+  /** Anchor (or re-anchor) the "time saved" counter to a local day key. */
+  setQuitDate(day: string): void {
+    this.meta = { ...this.meta, quitDate: day };
+    this.persistMeta();
     this.emit();
   }
 }

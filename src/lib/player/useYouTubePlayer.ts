@@ -19,6 +19,8 @@ type UseYouTubePlayerArgs = {
   onSeen?: () => void;
   /** Furthest position reached, for watch_state.watched_seconds and completion. */
   onFurthest?: (seconds: number) => void;
+  /** Live playback cursor (the resume point), reported only once "seen". */
+  onPosition?: (seconds: number) => void;
   /** Fired once on ended or at 90 percent. */
   onCompleted?: () => void;
   /** Real watched seconds delta since the last flush, for daily stats. */
@@ -29,6 +31,8 @@ type UseYouTubePlayerArgs = {
   media?: { title: string; channelLabel: string; thumbnailUrl: string };
   /** Start playing as soon as the player is ready (follows the user's click). */
   autoplay?: boolean;
+  /** Seek here (seconds) when the player loads, to resume where it was left off. */
+  startSeconds?: number;
 };
 
 export type UseYouTubePlayerResult = {
@@ -132,6 +136,16 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
         argsRef.current.onWatchTime?.(delta);
       }
       if (maxPositionRef.current > 0) argsRef.current.onFurthest?.(maxPositionRef.current);
+      // Report the live cursor as the resume point, but only once the video
+      // counts as "seen", so a brief glance never lands in continue-watching.
+      if (seenFiredRef.current) {
+        try {
+          const t = playerRef.current?.getCurrentTime?.() ?? 0;
+          if (Number.isFinite(t) && t > 0) argsRef.current.onPosition?.(t);
+        } catch {
+          // getCurrentTime can throw mid-teardown. Ignore.
+        }
+      }
     };
 
     const startTimers = (): void => {
@@ -278,6 +292,10 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
             modestbranding: 1,
             origin: window.location.origin,
             autoplay: argsRef.current.autoplay ? 1 : 0,
+            // Resume where it was left off. Integer seconds; 0/undefined = start.
+            ...(argsRef.current.startSeconds && argsRef.current.startSeconds > 0
+              ? { start: Math.floor(argsRef.current.startSeconds) }
+              : {}),
           },
           events: {
             onReady: () => {

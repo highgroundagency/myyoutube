@@ -7,6 +7,7 @@ import { useAppSearch } from '../components/appOutletContext';
 import { VideoGrid } from '../components/VideoGrid';
 import { VideoGridSkeleton } from '../components/Skeletons';
 import { ChannelChips } from '../components/ChannelChips';
+import { ContinueWatching } from '../components/ContinueWatching';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { Banner } from '../components/Banner';
@@ -22,7 +23,7 @@ const CHANNEL_ORDER = new Map(CHANNELS.map((c, i) => [c.key, i]));
 export function Home() {
   const feedQuery = useFeed();
   const liveQuery = useLive();
-  const { isSeen, markSeen, unmark } = useWatchState();
+  const { isSeen, markSeen, unmark, records } = useWatchState();
   const { online: extractorOnline } = useExtractorHealth();
   const { isDownloaded } = useDownloaded(extractorOnline);
   const query = useAppSearch().toLowerCase();
@@ -55,6 +56,8 @@ export function Home() {
 
   const display = useMemo(() => {
     const filtered = merged.filter((v) => {
+      // Scheduled premieres/streams can't be watched yet, so keep them out of the feed.
+      if (v.liveState === 'upcoming') return false;
       if (activeChannel && v.channelKey !== activeChannel) return false;
       if (query && !`${v.title} ${v.channelLabel}`.toLowerCase().includes(query)) return false;
       if (!showWatched && isSeen(v.id)) return false;
@@ -108,6 +111,8 @@ export function Home() {
       )}
 
       <LiveBanner live={sortNewestFirst(merged.filter((v) => v.liveState === 'live'))} />
+
+      <ContinueWatching />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ChannelChips channels={channelChips} active={activeChannel} onSelect={setActiveChannel} />
@@ -178,6 +183,7 @@ export function Home() {
             onToggleSeen={onToggleSeen}
             extractorOnline={extractorOnline}
             isDownloaded={isDownloaded}
+            records={records}
           />
           {visible < display.length && (
             <div className="mt-8 flex justify-center">

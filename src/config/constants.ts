@@ -54,6 +54,12 @@ export const SEEN_THRESHOLD_SECONDS = 3;
 /** Mark "completed" when furthest position reaches this ratio of duration. */
 export const COMPLETION_RATIO = 0.9;
 
+/**
+ * A video needs at least this much progress (seconds) to offer a resume point /
+ * appear in "continue watching". Keeps brief glances out of the rail.
+ */
+export const RESUME_MIN_SECONDS = 15;
+
 /** Heartbeat cadence while playing (accrue watch time, sample position). */
 export const HEARTBEAT_MS = 5000;
 
@@ -73,6 +79,17 @@ export const VIEWER_REGION = 'BR';
 
 /** A day counts toward the streak if it has at least this many watch minutes. */
 export const STREAK_MIN_MINUTES = 5;
+
+/**
+ * "Time saved from YouTube" counter. Gabe used to lose this many hours a day to
+ * the YouTube feed; every calendar day off it adds that much to the running
+ * total. Editable from the Stats page.
+ */
+export const DEFAULT_DAILY_YOUTUBE_HOURS = 1.5;
+
+/** Saved hours that make up one "day" and one "month" in the saved-time readout. */
+export const HOURS_PER_SAVED_DAY = 24;
+export const DAYS_PER_SAVED_MONTH = 30;
 
 // ----- Cache TTLs -----------------------------------------------------------
 

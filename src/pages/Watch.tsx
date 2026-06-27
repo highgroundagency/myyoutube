@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useFeed } from '../hooks/useFeed';
 import { useVideo } from '../hooks/useVideo';
@@ -11,10 +11,24 @@ import { CommentPreview } from '../components/CommentPreview';
 import { RecommendedRail } from '../components/RecommendedRail';
 import { ErrorState } from '../components/ErrorState';
 import { VideoCardSkeleton } from '../components/Skeletons';
-import { VIEWER_REGION } from '../config/constants';
+import { VIEWER_REGION, RESUME_MIN_SECONDS, COMPLETION_RATIO } from '../config/constants';
 import { relativeAge, scheduledLabel } from '../lib/format';
 import { formatDuration } from '../lib/youtube/duration';
 import type { Video } from '../lib/youtube/types';
+import type { WatchRecord } from '../lib/persistence/types';
+
+/**
+ * Where to resume this video, or 0 to start fresh. Uses the last cursor (or the
+ * furthest position as a fallback for older records), but only for in-progress
+ * videos with enough watched and not already near the end.
+ */
+function resumePoint(record: WatchRecord | undefined, durationSeconds: number): number {
+  if (!record || record.status === 'completed') return 0;
+  const point = record.lastPositionSeconds ?? record.watchedSeconds ?? 0;
+  if (point < RESUME_MIN_SECONDS) return 0;
+  if (durationSeconds > 0 && point >= durationSeconds * COMPLETION_RATIO) return 0;
+  return point;
+}
 
 function isRegionBlocked(video: Video): boolean {
   const r = video.regionRestriction;
@@ -47,7 +61,8 @@ export function Watch() {
   const { online: extractorOnline } = useExtractorHealth();
   const { isDownloaded } = useDownloaded(extractorOnline);
   const commentsQuery = useComments(videoId, Boolean(videoId));
-  const { recordProgress, markSeen, markCompleted, isSeen, addWatchSeconds } = usePersistence();
+  const { recordProgress, recordPosition, getRecord, markSeen, markCompleted, isSeen, addWatchSeconds } =
+    usePersistence();
 
   // Jump to the top so the player is in view the moment a video opens, instead
   // of keeping the feed's scroll position from where the card was tapped.
@@ -87,14 +102,36 @@ export function Watch() {
     },
     [addWatchSeconds],
   );
+  const onPosition = useCallback(
+    (seconds: number) => {
+      if (video) recordPosition(video, seconds);
+    },
+    [video, recordPosition],
+  );
+
+  // Capture the resume point once, the first time this video resolves, so the
+  // hint and the player's initial seek stay stable while the cursor moves.
+  const resumeRef = useRef<{ id: string; seconds: number } | null>(null);
+  if (video && resumeRef.current?.id !== video.id) {
+    resumeRef.current = {
+      id: video.id,
+      seconds: resumePoint(getRecord(video.id), video.durationSeconds),
+    };
+  }
+  const resumeFrom =
+    video && resumeRef.current && resumeRef.current.id === video.id
+      ? resumeRef.current.seconds
+      : 0;
 
   const { containerRef, status, errorCode, reload } = useYouTubePlayer({
     videoId,
     durationSeconds: video?.durationSeconds ?? 0,
     enabled: playable,
     autoplay: true,
+    startSeconds: resumeFrom,
     onSeen,
     onFurthest,
+    onPosition,
     onCompleted,
     onWatchTime,
     media: video
@@ -164,6 +201,15 @@ export function Watch() {
                 {video.durationSeconds > 0 && <span>{formatDuration(video.durationSeconds)}</span>}
                 {isSeen(video.id) && <span className="text-accent-600">Watched</span>}
               </div>
+              {resumeFrom > 0 && status !== 'error' && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-600">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Continuando de {formatDuration(resumeFrom)}
+                </p>
+              )}
               {extractorOnline && (
                 <div className="mt-3">
                   <DownloadButton

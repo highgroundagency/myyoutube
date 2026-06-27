@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { DailyStats, WatchRecord, WatchRecords } from '../lib/persistence/types';
+import type { AppMeta, DailyStats, WatchRecord, WatchRecords } from '../lib/persistence/types';
 import type { Video } from '../lib/youtube/types';
 
 /**
@@ -12,18 +12,28 @@ export type PersistenceContextValue = {
   ready: boolean;
   watchState: WatchRecords;
   dailyStats: DailyStats;
+  appMeta: AppMeta;
 
   isSeen: (id: string) => boolean;
   isCompleted: (id: string) => boolean;
   getRecord: (id: string) => WatchRecord | undefined;
 
   markSeen: (video: Video) => void;
+  /** Mark a batch of videos as seen in one update (e.g. a whole channel). */
+  markManySeen: (videos: Video[]) => void;
   markCompleted: (video: Video, watchedSeconds?: number) => void;
   recordProgress: (video: Video, watchedSeconds: number) => void;
+  /** Save the latest playback position (resume point) for a video. */
+  recordPosition: (video: Video, positionSeconds: number) => void;
+  /** Hide a video from the "continue watching" rail. */
+  dismissResume: (id: string) => void;
   unmark: (id: string) => void;
   clearWatchState: () => void;
 
   addWatchSeconds: (deltaSeconds: number, deltaCompleted?: number) => void;
+
+  /** Anchor the "time saved" counter to a local day key (yyyy-MM-dd). */
+  setQuitDate: (day: string) => void;
 
   getWatchState: () => WatchRecords;
   getDailyStats: () => DailyStats;

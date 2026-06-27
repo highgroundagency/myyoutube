@@ -20,6 +20,8 @@ type VideoCardProps = {
   downloaded?: boolean;
   /** Show a couple of top comments (lazy, once the card scrolls into view). */
   showComments?: boolean;
+  /** 0..1 watch progress; draws a YouTube-style bar across the thumbnail. */
+  progress?: number;
 };
 
 function Thumbnail({ src, alt }: { src: string; alt: string }) {
@@ -55,11 +57,13 @@ export function VideoCard({
   extractorOnline = false,
   downloaded = false,
   showComments = false,
+  progress = 0,
 }: VideoCardProps) {
   const isLive = video.liveState === 'live';
   const isUpcoming = video.liveState === 'upcoming';
   const duration = formatDuration(video.durationSeconds);
   const reduceMotion = useReducedMotion();
+  const showProgress = progress > 0 && !isLive && !isUpcoming;
 
   // Lazily load a couple of comments once the card scrolls into view, to keep
   // the feed lively without spending quota on cards nobody reaches.
@@ -97,6 +101,16 @@ export function VideoCard({
         {!isLive && !isUpcoming && duration && (
           <div className="pointer-events-none absolute bottom-2 right-2">
             <Badge variant="overlay">{duration}</Badge>
+          </div>
+        )}
+
+        {/* Watch progress bar, pinned to the bottom edge of the thumbnail. */}
+        {showProgress && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-xl bg-black/40">
+            <div
+              className="h-full bg-accent-500"
+              style={{ width: `${Math.min(100, Math.max(4, progress * 100))}%` }}
+            />
           </div>
         )}
 

@@ -36,6 +36,33 @@ describe('persistence watch state', () => {
     persistence.removeWatch('v1');
     expect(persistence.getWatchSnapshot().v1).toBeUndefined();
   });
+
+  it('keeps the latest resume position (it can move backward)', () => {
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', lastPositionSeconds: 120 });
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', lastPositionSeconds: 40 });
+    expect(persistence.getWatchSnapshot().v1.lastPositionSeconds).toBe(40);
+  });
+
+  it('dismisses from continue-watching, and a new position un-dismisses', () => {
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', lastPositionSeconds: 60 });
+    persistence.dismissResume('v1');
+    expect(persistence.getWatchSnapshot().v1.resumeDismissed).toBe(true);
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', lastPositionSeconds: 90 });
+    expect(persistence.getWatchSnapshot().v1.resumeDismissed).toBe(false);
+  });
+
+  it('marks many as seen without downgrading completed', () => {
+    persistence.upsertWatch({ videoId: 'done', status: 'completed', watchedSeconds: 100 });
+    persistence.markManySeen([
+      { videoId: 'done', status: 'seen' },
+      { videoId: 'fresh', status: 'seen', title: 'Fresh' },
+    ]);
+    const snap = persistence.getWatchSnapshot();
+    expect(snap.done.status).toBe('completed');
+    expect(snap.done.watchedSeconds).toBe(100);
+    expect(snap.fresh.status).toBe('seen');
+    expect(snap.fresh.title).toBe('Fresh');
+  });
 });
 
 describe('persistence daily stats', () => {
