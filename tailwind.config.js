@@ -44,9 +44,21 @@ export default {
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },
+        // A light streak that sweeps across once, then waits before repeating,
+        // for the "epic" golden card frame. The pause lives in the held 20%-100%.
+        goldshine: {
+          '0%': { transform: 'translateX(-160%) skewX(-12deg)' },
+          '20%, 100%': { transform: 'translateX(160%) skewX(-12deg)' },
+        },
+        goldglow: {
+          '0%, 100%': { boxShadow: '0 0 16px rgba(245,158,11,0.45)' },
+          '50%': { boxShadow: '0 0 26px rgba(245,158,11,0.7)' },
+        },
       },
       animation: {
         shimmer: 'shimmer 1.5s infinite',
+        goldshine: 'goldshine 4.5s ease-in-out infinite',
+        goldglow: 'goldglow 3s ease-in-out infinite',
       },
     },
   },

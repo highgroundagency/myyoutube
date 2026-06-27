@@ -50,19 +50,34 @@ export type ChannelConfig = {
   liveCheck?: boolean;
   /** Optional curation rules for what this channel contributes to the feed. */
   curation?: ChannelCuration;
+  /**
+   * Give this channel's fresh uploads the "epic" golden frame in the feed, like
+   * a rare gold sticker. Used for channels whose every new drop is an event.
+   */
+  epicNew?: boolean;
   category?: ChannelCategory;
 };
 
 export const CHANNELS: ChannelConfig[] = [
-  // Only show new MrBeast uploads from this date on; his back catalog is hidden.
+  // MrBeast posts every Saturday. Gabe is caught up, so both channels only show
+  // uploads from this Saturday on; the back catalog stays hidden. Every fresh
+  // drop gets the epic golden frame.
   {
     key: 'mrbeast',
     handle: '@MrBeast',
     label: 'MrBeast',
     category: 'entertainment',
-    curation: { publishedAfter: '2026-06-26T00:00:00.000Z' },
+    curation: { publishedAfter: '2026-06-27T00:00:00.000Z' },
+    epicNew: true,
   },
-  { key: 'mrbeastgaming', handle: '@MrBeastGaming', label: 'MrBeast Gaming', category: 'entertainment' },
+  {
+    key: 'mrbeastgaming',
+    handle: '@MrBeastGaming',
+    label: 'MrBeast Gaming',
+    category: 'entertainment',
+    curation: { publishedAfter: '2026-06-27T00:00:00.000Z' },
+    epicNew: true,
+  },
   // Pull Bryan Johnson's full catalog, not just the latest page.
   { key: 'bryanjohnson', handle: '@bryanjohnson', label: 'Bryan Johnson', category: 'health', curation: { fetchAll: true } },
   // Caze TV: only "melhores momentos" highlights in the feed; live arrives via the live check.
