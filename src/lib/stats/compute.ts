@@ -81,6 +81,34 @@ export function categoryMinutes(records: WatchRecords): CategoryMinutes[] {
     .sort((a, b) => b.minutes - a.minutes);
 }
 
+export type ChannelMinutes = { channelKey: string; channelLabel: string; minutes: number };
+
+/**
+ * Minutes per channel, summing the furthest position reached per video (the
+ * same honest proxy as categoryMinutes). Lets the viewer see, for example, how
+ * much time has gone to Joseph Prince specifically rather than lumped into a
+ * "faith" category. Videos only marked as seen (no real progress) contribute 0.
+ */
+export function channelMinutes(records: WatchRecords): ChannelMinutes[] {
+  const map = new Map<string, { label: string; seconds: number }>();
+  for (const r of Object.values(records)) {
+    const key = r.channelKey ?? 'unknown';
+    const prev = map.get(key);
+    map.set(key, {
+      label: prev?.label ?? r.channelLabel ?? key,
+      seconds: (prev?.seconds ?? 0) + (r.watchedSeconds ?? 0),
+    });
+  }
+  return [...map.entries()]
+    .map(([channelKey, v]) => ({
+      channelKey,
+      channelLabel: v.label,
+      minutes: Math.round(v.seconds / 60),
+    }))
+    .filter((c) => c.minutes > 0)
+    .sort((a, b) => b.minutes - a.minutes);
+}
+
 /** "3h 20m", "45m", "0m". */
 export function formatMinutes(totalMinutes: number): string {
   const mins = Math.max(0, Math.round(totalMinutes));

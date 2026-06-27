@@ -18,6 +18,7 @@ import {
   totalWatchSeconds,
   totalCompleted,
   categoryMinutes,
+  channelMinutes,
   formatMinutes,
   secondsToHours,
 } from '../lib/stats/compute';
@@ -41,7 +42,7 @@ export function Stats() {
   const completed = totalCompleted(stats);
   const streak = computeStreak(stats);
   const cats = useMemo(() => categoryMinutes(records), [records]);
-  const maxCat = cats[0]?.minutes ?? 0;
+  const channels = useMemo(() => channelMinutes(records), [records]);
   const hasData = totalSeconds > 0 || cats.length > 0;
 
   return (
@@ -114,30 +115,56 @@ export function Stats() {
       </section>
 
       <section className="mt-6 rounded-xl border border-line bg-surface p-4">
+        <h2 className="text-sm font-semibold">Time by channel</h2>
+        <p className="mb-3 text-xs text-fg-muted">How much of each channel you have actually watched.</p>
+        {channels.length === 0 ? (
+          <p className="text-sm text-fg-muted">No channel data yet.</p>
+        ) : (
+          <BarList
+            items={channels.map((c) => ({ key: c.channelKey, label: c.channelLabel, minutes: c.minutes }))}
+          />
+        )}
+      </section>
+
+      <section className="mt-6 rounded-xl border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold">Time by category</h2>
         <p className="mb-3 text-xs text-fg-muted">Based on how far you watched each video.</p>
         {cats.length === 0 ? (
           <p className="text-sm text-fg-muted">No category data yet.</p>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {cats.map((c) => (
-              <li key={c.category}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-medium">{CATEGORY_LABELS[c.category] ?? c.category}</span>
-                  <span className="text-fg-muted">{formatMinutes(c.minutes)}</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className="h-full rounded-full bg-accent-500"
-                    style={{ width: `${maxCat > 0 ? Math.max(4, (c.minutes / maxCat) * 100) : 0}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <BarList
+            items={cats.map((c) => ({
+              key: c.category,
+              label: CATEGORY_LABELS[c.category] ?? c.category,
+              minutes: c.minutes,
+            }))}
+          />
         )}
       </section>
     </div>
+  );
+}
+
+/** A descending list of labeled bars, scaled to the largest value. */
+function BarList({ items }: { items: { key: string; label: string; minutes: number }[] }) {
+  const max = items[0]?.minutes ?? 0;
+  return (
+    <ul className="flex flex-col gap-3">
+      {items.map((it) => (
+        <li key={it.key}>
+          <div className="mb-1 flex items-center justify-between text-sm">
+            <span className="font-medium">{it.label}</span>
+            <span className="text-fg-muted">{formatMinutes(it.minutes)}</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-accent-500"
+              style={{ width: `${max > 0 ? Math.max(4, (it.minutes / max) * 100) : 0}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

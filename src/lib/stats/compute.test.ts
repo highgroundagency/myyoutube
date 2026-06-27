@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { format, subDays } from 'date-fns';
-import { buildSeries, computeStreak, categoryMinutes, formatMinutes } from './compute';
+import { buildSeries, computeStreak, categoryMinutes, channelMinutes, formatMinutes } from './compute';
 import type { DailyStats, WatchRecords } from '../persistence/types';
 
 const today = new Date('2026-06-23T12:00:00');
@@ -54,6 +54,26 @@ describe('categoryMinutes', () => {
     const result = categoryMinutes(records);
     expect(result[0]).toEqual({ category: 'language', minutes: 20 });
     expect(result[1]).toEqual({ category: 'health', minutes: 15 });
+  });
+});
+
+describe('channelMinutes', () => {
+  it('sums watched seconds per channel, descending, keeping labels', () => {
+    const records: WatchRecords = {
+      a: { videoId: 'a', status: 'completed', watchedSeconds: 1800, channelKey: 'josephprince', channelLabel: 'Joseph Prince', firstWatchedAt: '', lastWatchedAt: '' },
+      b: { videoId: 'b', status: 'seen', watchedSeconds: 600, channelKey: 'josephprince', channelLabel: 'Joseph Prince', firstWatchedAt: '', lastWatchedAt: '' },
+      c: { videoId: 'c', status: 'seen', watchedSeconds: 300, channelKey: 'andrewfarley', channelLabel: 'Andrew Farley', firstWatchedAt: '', lastWatchedAt: '' },
+    };
+    const result = channelMinutes(records);
+    expect(result[0]).toEqual({ channelKey: 'josephprince', channelLabel: 'Joseph Prince', minutes: 40 });
+    expect(result[1]).toEqual({ channelKey: 'andrewfarley', channelLabel: 'Andrew Farley', minutes: 5 });
+  });
+
+  it('drops channels with no real watch time (only marked as seen)', () => {
+    const records: WatchRecords = {
+      a: { videoId: 'a', status: 'seen', watchedSeconds: 0, channelKey: 'mrbeast', channelLabel: 'MrBeast', firstWatchedAt: '', lastWatchedAt: '' },
+    };
+    expect(channelMinutes(records)).toEqual([]);
   });
 });
 
