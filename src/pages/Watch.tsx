@@ -6,6 +6,7 @@ import { useExtractorHealth, useDownloaded } from '../hooks/useExtractor';
 import { useComments } from '../hooks/useComments';
 import { usePersistence } from '../providers/persistence';
 import { useYouTubePlayer } from '../lib/player/useYouTubePlayer';
+import { useDocumentPiP } from '../lib/player/useDocumentPiP';
 import { DownloadButton } from '../components/DownloadButton';
 import { CommentPreview } from '../components/CommentPreview';
 import { RecommendedRail } from '../components/RecommendedRail';
@@ -139,6 +140,8 @@ export function Watch() {
       : undefined,
   });
 
+  const pip = useDocumentPiP(containerRef);
+
   const markSeenAndBack = () => {
     if (video) markSeen(video);
     navigate('/');
@@ -209,6 +212,21 @@ export function Watch() {
                   </svg>
                   Continuando de {formatDuration(resumeFrom)}
                 </p>
+              )}
+              {pip.supported && status === 'ready' && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={pip.toggle}
+                    className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                      <rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" />
+                    </svg>
+                    {pip.active ? 'Fechar janelinha' : 'Janelinha flutuante'}
+                  </button>
+                </div>
               )}
               {extractorOnline && (
                 <div className="mt-3">
