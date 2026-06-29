@@ -35,10 +35,17 @@ describe('buildResumeList', () => {
       done: rec({ videoId: 'done', status: 'completed', lastPositionSeconds: 100 }),
       dismissed: rec({ videoId: 'dismissed', lastPositionSeconds: 100, resumeDismissed: true }),
       glance: rec({ videoId: 'glance', lastPositionSeconds: 5 }),
-      ending: rec({ videoId: 'ending', lastPositionSeconds: 580, durationSeconds: 600 }),
+      ending: rec({ videoId: 'ending', lastPositionSeconds: 596, durationSeconds: 600 }),
       good: rec({ videoId: 'good', lastPositionSeconds: 100 }),
     };
     expect(buildResumeList(records).map((i) => i.videoId)).toEqual(['good']);
+  });
+
+  it('keeps a video that is watched most of the way but not at the very end', () => {
+    const records: WatchRecords = {
+      mid: rec({ videoId: 'mid', lastPositionSeconds: 540, durationSeconds: 600 }), // 90%
+    };
+    expect(buildResumeList(records).map((i) => i.videoId)).toEqual(['mid']);
   });
 
   it('orders by most recent activity and respects the limit', () => {

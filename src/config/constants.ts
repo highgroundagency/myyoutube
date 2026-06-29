@@ -51,8 +51,12 @@ export const YT_MAX_RETRIES = 3;
 /** Only mark a video "seen" after this many real seconds of playback. */
 export const SEEN_THRESHOLD_SECONDS = 3;
 
-/** Mark "completed" when furthest position reaches this ratio of duration. */
-export const COMPLETION_RATIO = 0.9;
+/**
+ * Mark "completed" when furthest position reaches this ratio of duration. Kept
+ * high (95%) so a video does not silently leave "continue watching" while the
+ * viewer still has minutes left, e.g. on a long podcast.
+ */
+export const COMPLETION_RATIO = 0.95;
 
 /**
  * A video needs at least this much progress (seconds) to offer a resume point /
