@@ -3,29 +3,10 @@ import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { useWatchState } from '../hooks/useWatchState';
 import { pickNextUp, pruneSnoozes, type SnoozeMap } from '../lib/feed/nextUp';
+import { loadSnoozes, saveSnoozes } from '../lib/feed/snoozeStore';
 import { PLACEHOLDER_THUMBNAIL } from '../lib/youtube/thumbnails';
 import { formatDuration } from '../lib/youtube/duration';
 import type { Video } from '../lib/youtube/types';
-
-const SNOOZE_KEY = 'gv-nextup-snooze';
-
-function loadSnoozes(): SnoozeMap {
-  try {
-    const raw = localStorage.getItem(SNOOZE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as SnoozeMap) : {};
-    return pruneSnoozes(parsed && typeof parsed === 'object' ? parsed : {});
-  } catch {
-    return {};
-  }
-}
-
-function saveSnoozes(map: SnoozeMap): void {
-  try {
-    localStorage.setItem(SNOOZE_KEY, JSON.stringify(map));
-  } catch {
-    // private mode: session-only
-  }
-}
 
 type NextUpCardProps = {
   videos: Video[];

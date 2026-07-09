@@ -31,6 +31,7 @@ function devApiPlugin(mode: string): Plugin {
         '/api/playlist': '/api/playlist.ts',
         '/api/comments': '/api/comments.ts',
         '/api/search': '/api/search.ts',
+        '/api/sync': '/api/sync.ts',
       };
 
       server.middlewares.use(async (req, res, next) => {
@@ -49,8 +50,21 @@ function devApiPlugin(mode: string): Plugin {
           const query: Record<string, string> = {};
           for (const [k, v] of url.searchParams.entries()) query[k] = v;
 
+          // Collect a JSON body for POST/PUT (Vercel parses this in production).
+          let body: unknown;
+          if (req.method === 'POST' || req.method === 'PUT') {
+            try {
+              const chunks: Buffer[] = [];
+              for await (const chunk of req) chunks.push(chunk as Buffer);
+              const text = Buffer.concat(chunks).toString('utf8');
+              body = text ? JSON.parse(text) : undefined;
+            } catch {
+              body = undefined;
+            }
+          }
+
           let status = 200;
-          const vReq = { query, method: req.method, headers: req.headers, url: rawUrl };
+          const vReq = { query, method: req.method, headers: req.headers, url: rawUrl, body };
           const vRes = {
             status(code: number) {
               status = code;

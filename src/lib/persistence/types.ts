@@ -53,11 +53,18 @@ export type DailyStat = { day: string; watchSeconds: number; videosCompleted: nu
 export type DailyStats = Record<string, DailyStat>;
 
 /**
- * Small device-local settings bag. quitDate anchors the "time saved from
- * YouTube" counter: the local day (yyyy-MM-dd) the viewer switched away from the
- * YouTube feed. Optional, so the UI can fall back to the earliest stats day.
+ * Small settings bag. quitDate anchors the "time saved from YouTube" counter:
+ * the local day (yyyy-MM-dd) the viewer switched away from the YouTube feed.
+ * quitDateSetAt orders concurrent edits across devices (latest set wins).
  */
-export type AppMeta = { quitDate?: string };
+export type AppMeta = { quitDate?: string; quitDateSetAt?: string };
+
+/**
+ * Tombstones for removed watch records (videoId -> ISO time of removal), so a
+ * deletion on one device does not resurrect from another device's copy on sync.
+ * A record watched again AFTER its tombstone wins over it.
+ */
+export type Deletions = Record<string, string>;
 
 /** Local date key (yyyy-MM-dd) in the viewer's timezone, NOT UTC (section 14). */
 export function localDayKey(date: Date = new Date()): string {

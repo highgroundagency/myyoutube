@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { persistence } from '../lib/persistence/idbStore';
+import { syncManager } from '../lib/sync/manager';
 import { PersistenceContext, type PersistenceContextValue } from './persistence';
 import { COMPLETION_RATIO } from '../config/constants';
 import type { Video } from '../lib/youtube/types';
@@ -16,10 +17,12 @@ export function PersistenceProvider({ children }: { children: ReactNode }) {
     persistence.getWatchSnapshot,
     persistence.getWatchSnapshot,
   );
+  // The UI reads the merged (all devices) stats view; the device's own slice
+  // stays separate inside the store for sync.
   const dailyStats = useSyncExternalStore(
     persistence.subscribe,
-    persistence.getStatsSnapshot,
-    persistence.getStatsSnapshot,
+    persistence.getDisplayStatsSnapshot,
+    persistence.getDisplayStatsSnapshot,
   );
   const appMeta = useSyncExternalStore(
     persistence.subscribe,
@@ -29,12 +32,19 @@ export function PersistenceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let stopSync: (() => void) | null = null;
     // init is idempotent: main.tsx may have already hydrated before first render.
     persistence.init().finally(() => {
-      if (active) setReady(true);
+      if (active) {
+        setReady(true);
+        // Cross-device sync starts only after local data is hydrated, so a
+        // first pull can never race an empty local store.
+        stopSync = syncManager.start();
+      }
     });
     return () => {
       active = false;
+      stopSync?.();
     };
   }, []);
 
@@ -86,7 +96,7 @@ export function PersistenceProvider({ children }: { children: ReactNode }) {
         persistence.addStats(deltaSeconds, deltaCompleted),
       setQuitDate: (day) => persistence.setQuitDate(day),
       getWatchState: () => persistence.getWatchSnapshot(),
-      getDailyStats: () => persistence.getStatsSnapshot(),
+      getDailyStats: () => persistence.getDisplayStatsSnapshot(),
     };
   }, [ready, watchState, dailyStats, appMeta]);
 

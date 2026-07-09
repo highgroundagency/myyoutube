@@ -51,6 +51,15 @@ describe('persistence watch state', () => {
     expect(persistence.getWatchSnapshot().v1.resumeDismissed).toBe(false);
   });
 
+  it('tombstones a removed video, and re-watching clears the tombstone', () => {
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', watchedSeconds: 50 });
+    persistence.removeWatch('v1');
+    expect(persistence.getWatchSnapshot().v1).toBeUndefined();
+    expect(persistence.getDeletionsSnapshot().v1).toBeTruthy();
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', watchedSeconds: 10 });
+    expect(persistence.getDeletionsSnapshot().v1).toBeUndefined();
+  });
+
   it('marks many as seen without downgrading completed', () => {
     persistence.upsertWatch({ videoId: 'done', status: 'completed', watchedSeconds: 100 });
     persistence.markManySeen([
@@ -89,5 +98,93 @@ describe('persistence daily stats', () => {
     await tick(); // let the fire-and-forget IndexedDB write settle
     const stored = await get<Record<string, { watchSeconds: number }>>('gv-daily-stats');
     expect(stored?.['2026-06-22']?.watchSeconds).toBe(600);
+  });
+});
+
+describe('applyRemote (cross-device sync)', () => {
+  beforeEach(() => {
+    persistence.clearWatch();
+    persistence.clearStats();
+  });
+
+  it('merges a remote record, sums remote stats into the display view only', () => {
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen', watchedSeconds: 100, lastPositionSeconds: 90 });
+    persistence.addStats(600, 0, '2026-06-25');
+
+    persistence.applyRemote(
+      {
+        phone: {
+          updatedAt: '2026-06-26T10:00:00.000Z',
+          watch: {
+            v1: {
+              videoId: 'v1',
+              status: 'seen',
+              watchedSeconds: 400,
+              lastPositionSeconds: 380,
+              firstWatchedAt: '2026-06-20T00:00:00.000Z',
+              lastWatchedAt: '2100-01-01T00:00:00.000Z',
+            },
+            v2: {
+              videoId: 'v2',
+              status: 'completed',
+              watchedSeconds: 900,
+              firstWatchedAt: '2026-06-21T00:00:00.000Z',
+              lastWatchedAt: '2026-06-21T01:00:00.000Z',
+            },
+          },
+          deletions: {},
+          stats: { '2026-06-25': { day: '2026-06-25', watchSeconds: 1200, videosCompleted: 1 } },
+          meta: {},
+          snoozes: {},
+        },
+      },
+      'laptop',
+    );
+
+    const watch = persistence.getWatchSnapshot();
+    expect(watch.v1.watchedSeconds).toBe(400); // remote was further
+    expect(watch.v1.lastPositionSeconds).toBe(380); // remote was the latest activity
+    expect(watch.v2.status).toBe('completed'); // arrived whole from the phone
+
+    // Own slice untouched; display sums both devices.
+    expect(persistence.getStatsSnapshot()['2026-06-25'].watchSeconds).toBe(600);
+    expect(persistence.getDisplayStatsSnapshot()['2026-06-25'].watchSeconds).toBe(1800);
+  });
+
+  it('applying the same remote twice never double counts (idempotent)', () => {
+    persistence.addStats(300, 0, '2026-06-25');
+    const devices = {
+      phone: {
+        updatedAt: '2026-06-26T10:00:00.000Z',
+        watch: {},
+        deletions: {},
+        stats: { '2026-06-25': { day: '2026-06-25', watchSeconds: 1000, videosCompleted: 0 } },
+        meta: {},
+        snoozes: {},
+      },
+    };
+    persistence.applyRemote(devices, 'laptop');
+    persistence.applyRemote(devices, 'laptop');
+    expect(persistence.getDisplayStatsSnapshot()['2026-06-25'].watchSeconds).toBe(1300);
+  });
+
+  it('a remote tombstone removes the local record', () => {
+    persistence.upsertWatch({ videoId: 'gone', status: 'seen' });
+    // The tombstone must be newer than the local record's lastWatchedAt.
+    const future = new Date(Date.now() + 60_000).toISOString();
+    persistence.applyRemote(
+      {
+        phone: {
+          updatedAt: future,
+          watch: {},
+          deletions: { gone: future },
+          stats: {},
+          meta: {},
+          snoozes: {},
+        },
+      },
+      'laptop',
+    );
+    expect(persistence.getWatchSnapshot().gone).toBeUndefined();
   });
 });

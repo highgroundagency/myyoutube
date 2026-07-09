@@ -2,12 +2,14 @@ import { get, set } from 'idb-keyval';
 import type {
   AppMeta,
   DailyStats,
+  Deletions,
   WatchRecord,
   WatchRecords,
   WatchStatus,
   WatchUpsert,
 } from './types';
 import { localDayKey } from './types';
+import { mergeWatch, mergeMeta, sumDailyStats, type SyncDevices } from '../sync/merge';
 
 /**
  * Local first persistence backed by IndexedDB (idb-keyval). This is the single
@@ -23,6 +25,8 @@ import { localDayKey } from './types';
 const WATCH_KEY = 'gv-watch-state';
 const STATS_KEY = 'gv-daily-stats';
 const META_KEY = 'gv-meta';
+const DELETIONS_KEY = 'gv-watch-deletions';
+const REMOTE_STATS_KEY = 'gv-remote-stats';
 
 type Listener = () => void;
 
@@ -33,8 +37,15 @@ function mergeStatus(prev: WatchStatus | undefined, next: WatchStatus): WatchSta
 
 class PersistenceStore {
   private watch: WatchRecords = {};
+  /** ONLY this device's own accrued stats (what it contributes to sync). */
   private stats: DailyStats = {};
   private meta: AppMeta = {};
+  /** Tombstones for removed records, so deletions survive sync. */
+  private deletions: Deletions = {};
+  /** Other devices' stats slices from the last pull (never mixed into ours). */
+  private remoteStats: Record<string, DailyStats> = {};
+  /** Own + remote stats summed per day: what the UI displays. */
+  private display: DailyStats = {};
   private listeners = new Set<Listener>();
   private initPromise: Promise<void> | null = null;
 
@@ -47,17 +58,22 @@ class PersistenceStore {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
       try {
-        const [w, s, m] = await Promise.all([
+        const [w, s, m, d, r] = await Promise.all([
           get<WatchRecords>(WATCH_KEY),
           get<DailyStats>(STATS_KEY),
           get<AppMeta>(META_KEY),
+          get<Deletions>(DELETIONS_KEY),
+          get<Record<string, DailyStats>>(REMOTE_STATS_KEY),
         ]);
         if (w && typeof w === 'object') this.watch = w;
         if (s && typeof s === 'object') this.stats = s;
         if (m && typeof m === 'object') this.meta = m;
+        if (d && typeof d === 'object') this.deletions = d;
+        if (r && typeof r === 'object') this.remoteStats = r;
       } catch {
         // IndexedDB unavailable (private mode, sandbox): stay in-memory only.
       }
+      this.recomputeDisplay();
       this.emit();
     })();
     return this.initPromise;
@@ -73,9 +89,18 @@ class PersistenceStore {
   getWatchSnapshot = (): WatchRecords => this.watch;
   getStatsSnapshot = (): DailyStats => this.stats;
   getMetaSnapshot = (): AppMeta => this.meta;
+  getDeletionsSnapshot = (): Deletions => this.deletions;
+  /** The merged (all devices) stats view for the UI. */
+  getDisplayStatsSnapshot = (): DailyStats => this.display;
 
   private emit(): void {
     for (const listener of this.listeners) listener();
+  }
+
+  private recomputeDisplay(): void {
+    const remotes = Object.values(this.remoteStats);
+    // No remote devices: display IS the own slice (same reference, no churn).
+    this.display = remotes.length === 0 ? this.stats : sumDailyStats([this.stats, ...remotes]);
   }
 
   private persistWatch(): void {
@@ -90,6 +115,14 @@ class PersistenceStore {
 
   private persistMeta(): void {
     void set(META_KEY, this.meta).catch(() => {});
+  }
+
+  private persistDeletions(): void {
+    void set(DELETIONS_KEY, this.deletions).catch(() => {});
+  }
+
+  private persistRemoteStats(): void {
+    void set(REMOTE_STATS_KEY, this.remoteStats).catch(() => {});
   }
 
   // ----- watch state mutations -----
@@ -124,6 +157,13 @@ class PersistenceStore {
       lastWatchedAt: now,
     };
     this.watch = { ...this.watch, [input.videoId]: record };
+    // Watching again supersedes any earlier removal of this video.
+    if (this.deletions[input.videoId]) {
+      const next = { ...this.deletions };
+      delete next[input.videoId];
+      this.deletions = next;
+      this.persistDeletions();
+    }
     this.persistWatch();
     this.emit();
     return record;
@@ -178,13 +218,21 @@ class PersistenceStore {
     const next = { ...this.watch };
     delete next[videoId];
     this.watch = next;
+    // Tombstone so the removal wins over other devices' copies on sync.
+    this.deletions = { ...this.deletions, [videoId]: new Date().toISOString() };
     this.persistWatch();
+    this.persistDeletions();
     this.emit();
   }
 
   clearWatch(): void {
+    const now = new Date().toISOString();
+    const tombstones: Deletions = { ...this.deletions };
+    for (const id of Object.keys(this.watch)) tombstones[id] = now;
     this.watch = {};
+    this.deletions = tombstones;
     this.persistWatch();
+    this.persistDeletions();
     this.emit();
   }
 
@@ -202,12 +250,14 @@ class PersistenceStore {
         videosCompleted: existing.videosCompleted + Math.max(0, deltaCompleted),
       },
     };
+    this.recomputeDisplay();
     this.persistStats();
     this.emit();
   }
 
   clearStats(): void {
     this.stats = {};
+    this.recomputeDisplay();
     this.persistStats();
     this.emit();
   }
@@ -216,7 +266,41 @@ class PersistenceStore {
 
   /** Anchor (or re-anchor) the "time saved" counter to a local day key. */
   setQuitDate(day: string): void {
-    this.meta = { ...this.meta, quitDate: day };
+    this.meta = { ...this.meta, quitDate: day, quitDateSetAt: new Date().toISOString() };
+    this.persistMeta();
+    this.emit();
+  }
+
+  // ----- cross-device sync -----
+
+  /**
+   * Merge every device's slice (from the cloud) into this device. Own stats are
+   * NEVER touched: other devices' stats go into the remote cache and reach the
+   * UI via the summed display view. Watch records and tombstones field-merge;
+   * the quit date takes the latest explicit edit. One persist + one emit.
+   */
+  applyRemote(devices: SyncDevices, ownDeviceId: string): void {
+    const others = Object.entries(devices).filter(([id]) => id !== ownDeviceId);
+
+    const merged = mergeWatch(
+      [this.watch, ...others.map(([, s]) => s.watch ?? {})],
+      [this.deletions, ...others.map(([, s]) => s.deletions ?? {})],
+    );
+    this.watch = merged.watch;
+    this.deletions = merged.deletions;
+
+    const remoteStats: Record<string, DailyStats> = {};
+    for (const [id, slice] of others) {
+      if (slice.stats && typeof slice.stats === 'object') remoteStats[id] = slice.stats;
+    }
+    this.remoteStats = remoteStats;
+
+    this.meta = { ...this.meta, ...mergeMeta([this.meta, ...others.map(([, s]) => s.meta ?? {})]) };
+
+    this.recomputeDisplay();
+    this.persistWatch();
+    this.persistDeletions();
+    this.persistRemoteStats();
     this.persistMeta();
     this.emit();
   }

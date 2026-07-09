@@ -12,6 +12,7 @@ import {
 import { useDailyStats } from '../hooks/useDailyStats';
 import { useWatchState } from '../hooks/useWatchState';
 import { TimeSavedCard } from '../components/TimeSavedCard';
+import { SyncStatusLine } from '../components/SyncStatusLine';
 import {
   buildSeries,
   computeStreak,
@@ -141,6 +142,8 @@ export function Stats() {
           />
         )}
       </section>
+
+      <SyncStatusLine />
     </div>
   );
 }
