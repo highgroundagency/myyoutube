@@ -80,14 +80,17 @@ export const CHANNELS: ChannelConfig[] = [
   },
   // Pull Bryan Johnson's full catalog, not just the latest page.
   { key: 'bryanjohnson', handle: '@bryanjohnson', label: 'Bryan Johnson', category: 'health', curation: { fetchAll: true } },
-  // Caze TV: only "melhores momentos" highlights in the feed; live arrives via the live check.
+  // Oscar Patel (health/looks). Handle verified at youtube.com/@oscar_patel.
+  { key: 'oscarpatel', handle: '@oscar_patel', label: 'Oscar Patel', searchName: 'Oscar Patel', category: 'health' },
+  // Mike Mew ("Mewing By Mike Mew", formerly Orthotropics). Resolved by id,
+  // verified against the title; falls back to searching the name if it changes.
   {
-    key: 'cazetv',
-    handle: '@CazeTV',
-    label: 'Caze TV',
-    category: 'sports',
-    liveCheck: true,
-    curation: { titleIncludesAny: ['melhores momentos'] },
+    key: 'mikemew',
+    channelId: 'UC6eh59CVGAMTjxo6q9gCMZA',
+    label: 'Mike Mew',
+    expectedTitleIncludes: 'Mew',
+    searchName: 'Mewing By Mike Mew',
+    category: 'health',
   },
   { key: 'josephprince', handle: '@JosephPrince', label: 'Joseph Prince', category: 'faith' },
   // Resolved directly by id, verified against the expected teaching channel title.

@@ -30,6 +30,7 @@ function devApiPlugin(mode: string): Plugin {
         '/api/video': '/api/video.ts',
         '/api/playlist': '/api/playlist.ts',
         '/api/comments': '/api/comments.ts',
+        '/api/search': '/api/search.ts',
       };
 
       server.middlewares.use(async (req, res, next) => {

@@ -196,6 +196,40 @@ export async function fetchComments(videoId: string, signal?: AbortSignal): Prom
   }
 }
 
+/**
+ * Real YouTube search (section: search). In MOCK_MODE (and in dev with no /api)
+ * it degrades to filtering the fixture pool by title/channel, so the page still
+ * demonstrates itself without a key.
+ */
+export async function fetchSearch(query: string, signal?: AbortSignal): Promise<Video[]> {
+  const fromMock = () => {
+    const q = query.toLowerCase();
+    return buildMockFeed().videos.filter((v) =>
+      `${v.title} ${v.channelLabel}`.toLowerCase().includes(q),
+    );
+  };
+  if (MOCK_MODE) return fromMock();
+
+  try {
+    const res = await getResponse(`/api/search?q=${encodeURIComponent(query)}`, signal);
+    if (res.status === 503 || res.status === 404) return IS_DEV ? fromMock() : [];
+    if (!res.ok) {
+      if (IS_DEV) return fromMock();
+      const retryable = res.status >= 500;
+      throw new YouTubeError(retryable ? 'transient' : 'unknown', `Search failed (${res.status}).`, {
+        status: res.status,
+        retryable,
+      });
+    }
+    const json = await readJson(res);
+    if (!isJsonObject(json)) return IS_DEV ? fromMock() : [];
+    return parseValidItems(canonicalVideoSchema, json.videos);
+  } catch (err) {
+    if (IS_DEV) return fromMock();
+    throw err;
+  }
+}
+
 /** Videos of a learning playlist, in lesson order. Empty on any failure. */
 export async function fetchPlaylist(playlistId: string, signal?: AbortSignal): Promise<Video[]> {
   if (MOCK_MODE) return [];

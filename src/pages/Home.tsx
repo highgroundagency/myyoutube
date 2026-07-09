@@ -8,6 +8,7 @@ import { VideoGrid } from '../components/VideoGrid';
 import { VideoGridSkeleton } from '../components/Skeletons';
 import { ChannelChips } from '../components/ChannelChips';
 import { ContinueWatching } from '../components/ContinueWatching';
+import { NextUpCard } from '../components/NextUpCard';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { Banner } from '../components/Banner';
@@ -113,6 +114,8 @@ export function Home() {
       <LiveBanner live={sortNewestFirst(merged.filter((v) => v.liveState === 'live'))} />
 
       <ContinueWatching />
+
+      <NextUpCard videos={merged} channelKey="bryanjohnson" title="Maratona Bryan Johnson" />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ChannelChips channels={channelChips} active={activeChannel} onSelect={setActiveChannel} />

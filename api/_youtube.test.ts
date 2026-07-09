@@ -16,17 +16,17 @@ function jsonRes(data: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-// id shape: v_<channelKey>_<kind>
+// id shape: v_<channelKey>_<kind>. The kind is the LAST segment so channel keys
+// containing underscores (e.g. the oscar_patel handle) keep working.
 function makeVideo(id: string): unknown {
   const parts = id.split('_');
-  const key = parts[1] ?? 'x';
-  const kind = parts[2] ?? 'long';
+  const kind = parts.length > 2 ? parts[parts.length - 1] : 'long';
+  const key = parts.length > 2 ? parts.slice(1, -1).join('_') : (parts[1] ?? 'x');
   if (kind === 'omit') return null; // videos.list deliberately omits this id
 
-  // Caze TV is curated to "melhores momentos" only, so give its videos a
-  // matching title. The date is after MrBeast's new-only cutoff so the pipeline
-  // test is not filtered by curation (curation drop logic is unit tested).
-  const title = key === 'cazetv' ? `Melhores Momentos: ${key} ${kind}` : `${key} ${kind}`;
+  // The date is after MrBeast's new-only cutoff so the pipeline test is not
+  // filtered by curation (curation drop logic is unit tested separately).
+  const title = `${key} ${kind}`;
   const snippet: Record<string, unknown> = {
     channelId: `UC_${key}`,
     title,
@@ -136,12 +136,13 @@ describe('buildFeed', () => {
     expect(andrew?.resolvedBy).toBe('id');
     expect(andrew?.title).toBe('The Grace Message with Dr. Andrew Farley');
 
-    // All six channels resolve and each contributes one long form video. MrBeast
-    // survives its new-only rule (recent date) and Caze TV survives its title
-    // rule (the mock titles it "Melhores Momentos").
+    // All seven channels resolve and each contributes one long form video.
+    // Both MrBeast channels survive their new-only rule (recent mock date), and
+    // the two health channels resolve (handle with underscore; id + search).
     expect(videos.some((v) => v.channelKey === 'mrbeast')).toBe(true);
-    expect(videos.some((v) => v.channelKey === 'cazetv')).toBe(true);
-    expect(videos.length).toBe(6);
+    expect(videos.some((v) => v.channelKey === 'oscarpatel')).toBe(true);
+    expect(videos.some((v) => v.channelKey === 'mikemew')).toBe(true);
+    expect(videos.length).toBe(7);
   });
 
   it('throws a quota error (not a raw 500) when videos.list is rate limited', async () => {
@@ -157,17 +158,10 @@ describe('buildFeed', () => {
 });
 
 describe('getLiveVideos', () => {
-  it('returns a live stream confirmed by videos.list cross check', async () => {
-    cfg.liveSearchVideoId = 'v_cazetv_live';
-    const live = await getLiveVideos(API_KEY);
-    expect(live).toHaveLength(1);
-    expect(live[0].id).toBe('v_cazetv_live');
-    expect(live[0].liveState).toBe('live');
-    expect(live[0].channelKey).toBe('cazetv');
-  });
-
-  it('returns nothing live when the search index is empty', async () => {
-    cfg.liveSearchVideoId = null;
+  it('returns nothing when no channel opts into the live check (current config)', async () => {
+    // Caze TV (the only liveCheck channel) was removed from the pool. Even with
+    // a live result sitting in the search index, no channel is checked.
+    cfg.liveSearchVideoId = 'v_josephprince_live';
     const live = await getLiveVideos(API_KEY);
     expect(live).toHaveLength(0);
   });

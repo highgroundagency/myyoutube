@@ -36,7 +36,7 @@ import {
   isRemovedPlaylistTitle,
   type ChannelLookup,
 } from '../src/lib/youtube/normalize.js';
-import { applyFilters, dedupeById, sortNewestFirst } from '../src/lib/youtube/filters.js';
+import { applyFilters, dedupeById, isShort, sortNewestFirst } from '../src/lib/youtube/filters.js';
 import { passesCuration, uploadFetchLimit } from '../src/lib/youtube/curation.js';
 import { YouTubeError, classifyYouTubeReason } from '../src/lib/youtube/errors.js';
 import { cacheGet, cacheSet } from './_cache.js';
@@ -401,6 +401,59 @@ export async function buildFeed(apiKey: string): Promise<{ videos: Video[]; reso
   const videos = sortNewestFirst(dedupeById(filtered));
 
   return { videos, resolvedChannels: resolved };
+}
+
+// ---------------------------------------------------------------------------
+// Search (YouTube-wide, on explicit submit only: search.list costs 100 units)
+// ---------------------------------------------------------------------------
+
+const SEARCH_CACHE_MS = 10 * 60 * 1000;
+
+/**
+ * Real YouTube search. Finds candidate ids via search.list, then loads full
+ * details via videos.list so results carry duration/status like the feed.
+ * Videos from my channels keep their channelKey; anything else normalizes
+ * loose. Shorts and non-public videos are dropped (app identity: long form),
+ * but non-embeddable stay (the watch page has an "Open on YouTube" fallback).
+ */
+export async function searchVideos(apiKey: string, query: string, max = 20): Promise<Video[]> {
+  const cacheKey = `search:${query.toLowerCase()}:${max}`;
+  const cached = cacheGet<Video[]>(cacheKey);
+  if (cached) return cached;
+
+  const data = await ytFetch(
+    'search',
+    { part: 'snippet', q: query, type: 'video', maxResults: String(Math.min(25, max)) },
+    apiKey,
+  );
+  const list = listResponseSchema.safeParse(data);
+  const items = parseValidItems(searchItemSchema, list.success ? list.data.items : []);
+  const ids = items
+    .map((i) => i.id?.videoId)
+    .filter((v): v is string => Boolean(v));
+
+  if (ids.length === 0) return [];
+
+  const [details, resolved] = await Promise.all([
+    fetchVideoDetails(ids, apiKey),
+    resolveAllChannels(apiKey).catch(() => [] as ResolvedChannel[]),
+  ]);
+  const lookup = channelLookupFrom(resolved);
+
+  const videos: Video[] = [];
+  for (const id of ids) {
+    const raw = details.get(id);
+    if (!raw) continue;
+    const v = normalizeVideo(raw, lookup) ?? normalizeVideoLoose(raw);
+    if (!v) continue;
+    if (!v.isPublic) continue;
+    if (isShort(v)) continue;
+    videos.push(v);
+  }
+
+  const result = dedupeById(videos).slice(0, max);
+  cacheSet(cacheKey, result, SEARCH_CACHE_MS);
+  return result;
 }
 
 /** Fetch a single video by id (on demand watch links, section 11). */

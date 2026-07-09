@@ -50,6 +50,7 @@ const Channel = lazyRetry(() => import('./pages/Channel').then((m) => ({ default
 const History = lazyRetry(() => import('./pages/History').then((m) => ({ default: m.History })));
 const Learn = lazyRetry(() => import('./pages/Learn').then((m) => ({ default: m.Learn })));
 const Downloads = lazyRetry(() => import('./pages/Downloads').then((m) => ({ default: m.Downloads })));
+const Search = lazyRetry(() => import('./pages/Search').then((m) => ({ default: m.Search })));
 const NotFound = lazyRetry(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 const AudioTest = lazyRetry(() => import('./pages/AudioTest').then((m) => ({ default: m.AudioTest })));
 
@@ -74,6 +75,7 @@ export function AppRoutes() {
           <Route path="/channel/:channelKey" element={<Channel />} />
           <Route path="/learn/:courseKey" element={<Learn />} />
           <Route path="/baixar" element={<Downloads />} />
+          <Route path="/buscar" element={<Search />} />
           <Route path="/history" element={<History />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="*" element={<NotFound />} />
