@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
 import { useWatchState } from '../hooks/useWatchState';
 import { pickNextUp, pruneSnoozes, type SnoozeMap } from '../lib/feed/nextUp';
 import { loadSnoozes, saveSnoozes } from '../lib/feed/snoozeStore';
@@ -44,7 +43,12 @@ export function NextUpCard({ videos, channelKey, title }: NextUpCardProps) {
 
   if (!next) return null;
   const { video, watched, total, progress } = next;
-  const publishedYear = format(parseISO(video.publishedAt), 'yyyy');
+  // Defensive: publishedAt is schema-validated as a string, not as a date, so
+  // never let a malformed one throw inside the Home render.
+  const publishedTime = Date.parse(video.publishedAt);
+  const publishedYear = Number.isFinite(publishedTime)
+    ? String(new Date(publishedTime).getFullYear())
+    : '';
 
   return (
     <section
@@ -78,7 +82,8 @@ export function NextUpCard({ videos, channelKey, title }: NextUpCardProps) {
               <h3 className="clamp-2 text-base font-semibold leading-snug text-fg">{video.title}</h3>
             </Link>
             <p className="mt-1 text-xs text-fg-muted">
-              #{next.position} da jornada · {publishedYear}
+              #{next.position} da jornada
+              {publishedYear && ` · ${publishedYear}`}
             </p>
           </div>
 

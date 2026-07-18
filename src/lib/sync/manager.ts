@@ -40,6 +40,10 @@ class SyncManager {
   private pushQueued = false;
   private unsubscribeStore: (() => void) | null = null;
   private running = false;
+  /** The store writeSeq already uploaded; push only when it moved. */
+  private lastPushedSeq = -1;
+  /** Set by a snooze change (lives outside the store), cleared on upload. */
+  private snoozeDirty = false;
 
   // ----- reactive status (useSyncExternalStore) -----
 
@@ -70,7 +74,7 @@ class SyncManager {
     window.addEventListener('focus', this.onFocus);
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('pagehide', this.onPageHide);
-    window.addEventListener(SNOOZE_EVENT, this.onLocalChange);
+    window.addEventListener(SNOOZE_EVENT, this.onSnoozeChange);
     this.unsubscribeStore = persistence.subscribe(this.onLocalChange);
 
     return () => this.stop();
@@ -85,7 +89,7 @@ class SyncManager {
     window.removeEventListener('focus', this.onFocus);
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pagehide', this.onPageHide);
-    window.removeEventListener(SNOOZE_EVENT, this.onLocalChange);
+    window.removeEventListener(SNOOZE_EVENT, this.onSnoozeChange);
     this.unsubscribeStore?.();
     this.unsubscribeStore = null;
   }
@@ -103,8 +107,20 @@ class SyncManager {
     void this.push(true);
   };
 
+  /** Something local to upload? (Pull merges bump neither of these.) */
+  private hasPendingChanges(): boolean {
+    return this.snoozeDirty || persistence.getWriteSeq() !== this.lastPushedSeq;
+  }
+
+  private onSnoozeChange = (): void => {
+    this.snoozeDirty = true;
+    this.onLocalChange();
+  };
+
   private onLocalChange = (): void => {
     if (this.configured === false) return;
+    // Emits caused by merging a pull carry nothing new: do not re-upload them.
+    if (!this.hasPendingChanges()) return;
     if (this.pushQueued) return;
     this.pushQueued = true;
     const wait = Math.max(PUSH_DEBOUNCE_MS, this.lastPushAt + PUSH_MIN_GAP_MS - Date.now());
@@ -168,7 +184,11 @@ class SyncManager {
 
   private async push(keepalive = false): Promise<void> {
     if (!this.running || this.configured === false) return;
+    if (!this.hasPendingChanges()) return; // nothing new to say
     this.lastPushAt = Date.now();
+    // Capture what this upload covers; changes landing mid-flight re-dirty it.
+    const seq = persistence.getWriteSeq();
+    this.snoozeDirty = false;
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
@@ -177,9 +197,13 @@ class SyncManager {
         cache: 'no-store',
         keepalive,
       });
-      if (res.ok) this.setState({ status: 'ok', lastSyncAt: new Date().toISOString() });
+      if (!res.ok) throw new Error(`push failed (${res.status})`);
+      this.lastPushedSeq = seq;
+      this.setState({ status: 'ok', lastSyncAt: new Date().toISOString() });
     } catch {
-      // A failed push is retried by the next write/interval; never user-facing.
+      // Never user-facing: re-dirty and retry shortly (or on the next write).
+      this.snoozeDirty = true;
+      if (this.running && !keepalive) setTimeout(() => this.onLocalChange(), 30_000);
     }
   }
 }

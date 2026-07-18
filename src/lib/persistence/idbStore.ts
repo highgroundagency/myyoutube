@@ -46,6 +46,12 @@ class PersistenceStore {
   private remoteStats: Record<string, DailyStats> = {};
   /** Own + remote stats summed per day: what the UI displays. */
   private display: DailyStats = {};
+  /**
+   * Bumped on every LOCAL mutation (never on applyRemote), so the sync manager
+   * can tell "this device changed something" apart from "a pull was merged in"
+   * and only upload when there is actually something new to say.
+   */
+  private writeSeq = 0;
   private listeners = new Set<Listener>();
   private initPromise: Promise<void> | null = null;
 
@@ -74,7 +80,7 @@ class PersistenceStore {
         // IndexedDB unavailable (private mode, sandbox): stay in-memory only.
       }
       this.recomputeDisplay();
-      this.emit();
+      this.emit(); // hydrate is not a local mutation
     })();
     return this.initPromise;
   }
@@ -92,8 +98,11 @@ class PersistenceStore {
   getDeletionsSnapshot = (): Deletions => this.deletions;
   /** The merged (all devices) stats view for the UI. */
   getDisplayStatsSnapshot = (): DailyStats => this.display;
+  /** Monotonic counter of local mutations (see writeSeq above). */
+  getWriteSeq = (): number => this.writeSeq;
 
-  private emit(): void {
+  private emit(local = false): void {
+    if (local) this.writeSeq += 1;
     for (const listener of this.listeners) listener();
   }
 
@@ -165,7 +174,7 @@ class PersistenceStore {
       this.persistDeletions();
     }
     this.persistWatch();
-    this.emit();
+    this.emit(true);
     return record;
   }
 
@@ -198,7 +207,7 @@ class PersistenceStore {
     }
     this.watch = next;
     this.persistWatch();
-    this.emit();
+    this.emit(true);
   }
 
   /** Hide a video from the "continue watching" rail without losing its history. */
@@ -210,7 +219,7 @@ class PersistenceStore {
       [videoId]: { ...existing, resumeDismissed: true },
     };
     this.persistWatch();
-    this.emit();
+    this.emit(true);
   }
 
   removeWatch(videoId: string): void {
@@ -222,7 +231,7 @@ class PersistenceStore {
     this.deletions = { ...this.deletions, [videoId]: new Date().toISOString() };
     this.persistWatch();
     this.persistDeletions();
-    this.emit();
+    this.emit(true);
   }
 
   clearWatch(): void {
@@ -233,7 +242,7 @@ class PersistenceStore {
     this.deletions = tombstones;
     this.persistWatch();
     this.persistDeletions();
-    this.emit();
+    this.emit(true);
   }
 
   // ----- daily stats mutations -----
@@ -252,14 +261,14 @@ class PersistenceStore {
     };
     this.recomputeDisplay();
     this.persistStats();
-    this.emit();
+    this.emit(true);
   }
 
   clearStats(): void {
     this.stats = {};
     this.recomputeDisplay();
     this.persistStats();
-    this.emit();
+    this.emit(true);
   }
 
   // ----- app meta -----
@@ -268,7 +277,7 @@ class PersistenceStore {
   setQuitDate(day: string): void {
     this.meta = { ...this.meta, quitDate: day, quitDateSetAt: new Date().toISOString() };
     this.persistMeta();
-    this.emit();
+    this.emit(true);
   }
 
   // ----- cross-device sync -----
@@ -302,7 +311,7 @@ class PersistenceStore {
     this.persistDeletions();
     this.persistRemoteStats();
     this.persistMeta();
-    this.emit();
+    this.emit(); // merging a pull is not a local mutation: no push needed
   }
 }
 

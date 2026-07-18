@@ -168,6 +168,27 @@ describe('applyRemote (cross-device sync)', () => {
     expect(persistence.getDisplayStatsSnapshot()['2026-06-25'].watchSeconds).toBe(1300);
   });
 
+  it('bumps writeSeq on local mutations but NOT when merging a pull', () => {
+    const before = persistence.getWriteSeq();
+    persistence.upsertWatch({ videoId: 'v1', status: 'seen' });
+    expect(persistence.getWriteSeq()).toBe(before + 1);
+    const afterLocal = persistence.getWriteSeq();
+    persistence.applyRemote(
+      {
+        phone: {
+          updatedAt: '2026-06-26T10:00:00.000Z',
+          watch: {},
+          deletions: {},
+          stats: {},
+          meta: {},
+          snoozes: {},
+        },
+      },
+      'laptop',
+    );
+    expect(persistence.getWriteSeq()).toBe(afterLocal); // pulls never look like local edits
+  });
+
   it('a remote tombstone removes the local record', () => {
     persistence.upsertWatch({ videoId: 'gone', status: 'seen' });
     // The tombstone must be newer than the local record's lastWatchedAt.
