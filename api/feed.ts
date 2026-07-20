@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { buildFeed, requireApiKey } from './_youtube.js';
 import { cacheGet, cacheSet } from './_cache.js';
-import { FEED_CACHE_CONTROL } from '../src/config/constants.js';
+import { FEED_CACHE_CONTROL, FEED_MEMO_MS } from '../src/config/constants.js';
 import { YouTubeError } from '../src/lib/youtube/errors.js';
 import type { FeedResponse, ResolvedChannel, Video } from '../src/lib/youtube/types.js';
 
@@ -21,9 +21,27 @@ type CachedFeed = { videos: Video[]; resolvedChannels: ResolvedChannel[] };
 export default async function handler(_req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const apiKey = requireApiKey();
+
+    // Warm-instance fast path: a recently built feed skips the whole YouTube
+    // pipeline (7 channel resolutions + paginated uploads + detail chunks).
+    // The CDN usually absorbs repeats, but every deploy purges it; this keeps
+    // post-deploy requests fast on any instance that has built once.
+    const memo = cacheGet<CachedFeed>('feed:fresh');
+    if (memo) {
+      res.setHeader('Cache-Control', FEED_CACHE_CONTROL);
+      res.status(200).json({
+        ...memo,
+        stale: false,
+        mock: false,
+        notice: null,
+      } satisfies FeedResponse);
+      return;
+    }
+
     const { videos, resolvedChannels } = await buildFeed(apiKey);
 
-    // Keep a warm-instance copy for the quota fallback path.
+    // Short memo for the fast path above + a long copy for the quota fallback.
+    cacheSet('feed:fresh', { videos, resolvedChannels } satisfies CachedFeed, FEED_MEMO_MS);
     cacheSet('feed:last', { videos, resolvedChannels } satisfies CachedFeed, 6 * 60 * 60 * 1000);
 
     res.setHeader('Cache-Control', FEED_CACHE_CONTROL);

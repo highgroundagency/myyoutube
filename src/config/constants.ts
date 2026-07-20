@@ -103,8 +103,15 @@ export const FEED_STALE_MS = 30 * 60 * 1000;
 /** Client staleTime for live status. */
 export const LIVE_STALE_MS = 60 * 1000;
 
-/** Server CDN cache for /api/feed: 30 min fresh, 10 min stale while revalidate. */
-export const FEED_CACHE_CONTROL = 's-maxage=1800, stale-while-revalidate=600';
+/**
+ * Server CDN cache for /api/feed: 30 min fresh, then serve stale INSTANTLY for
+ * up to a day while revalidating in the background. The long SWR window is the
+ * difference between "skeletons for 10s" and "instant feed" after quiet hours.
+ */
+export const FEED_CACHE_CONTROL = 's-maxage=1800, stale-while-revalidate=86400';
+
+/** Warm-instance memo of the built feed: skip the whole pipeline when fresh. */
+export const FEED_MEMO_MS = 5 * 60 * 1000;
 
 /** Server CDN cache for /api/live: short, live status changes fast. */
 export const LIVE_CACHE_CONTROL = 's-maxage=60, stale-while-revalidate=60';
