@@ -41,6 +41,13 @@ function isRegionBlocked(video: Video): boolean {
 
 function playerErrorMessage(code: number | null): string {
   switch (code) {
+    // -1 / -2 are ours, not YouTube's: the player script or the player itself
+    // never came up. On iPhones that is almost always something blocking
+    // youtube.com, so the message has to say so instead of being generic.
+    case -1:
+      return 'Não consegui carregar o player do YouTube. Se você usa bloqueador de anúncios/conteúdo no Safari, VPN, Private Relay ou Modo Restrito, desative pra este site e toque em "Tentar de novo".';
+    case -2:
+      return 'O player carregou mas não iniciou. Costuma ser bloqueador de conteúdo, Modo de Baixo Consumo ou conexão instável. Toque em "Tentar de novo" ou abra no YouTube.';
     case 2:
       return 'This video link looks invalid.';
     case 5:
@@ -329,7 +336,10 @@ function PlayerArea({
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
 
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+        // pointer-events-none is essential: iOS blocks autoplay, so the very
+        // first play REQUIRES a tap on the iframe. An interactive overlay here
+        // silently swallows that tap and the video never starts.
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
         </div>
       )}

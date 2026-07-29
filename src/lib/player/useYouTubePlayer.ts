@@ -6,6 +6,7 @@ import {
   COMPLETION_RATIO,
   HEARTBEAT_MS,
   FLUSH_INTERVAL_MS,
+  PLAYER_READY_TIMEOUT_MS,
 } from '../../config/constants';
 
 export type PlayerStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -85,6 +86,17 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
     if (!container) return;
 
     let cancelled = false;
+    // Watchdog: the embed can be blocked (content blocker, Lockdown Mode) in a
+    // way that fires no event at all, so onReady simply never arrives. Without
+    // this the UI would spin forever with no way out.
+    let readyFired = false;
+    let readyWatchdog: ReturnType<typeof setTimeout> | null = null;
+    const clearReadyWatchdog = (): void => {
+      if (readyWatchdog != null) {
+        clearTimeout(readyWatchdog);
+        readyWatchdog = null;
+      }
+    };
 
     // Reset tracking for this video.
     playStartRef.current = null;
@@ -299,6 +311,8 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
           },
           events: {
             onReady: () => {
+              readyFired = true;
+              clearReadyWatchdog();
               if (cancelled) return;
               setStatus('ready');
               setupMediaSession();
@@ -329,6 +343,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
               }
             },
             onError: (e) => {
+              clearReadyWatchdog();
               if (cancelled) return;
               setErrorCode(e.data);
               setStatus('error');
@@ -336,6 +351,14 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
             },
           },
         });
+
+        readyWatchdog = setTimeout(() => {
+          readyWatchdog = null;
+          if (cancelled || readyFired) return;
+          console.error('[player] onReady never fired; the embed is likely blocked.');
+          setErrorCode(-2);
+          setStatus('error');
+        }, PLAYER_READY_TIMEOUT_MS);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -346,6 +369,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
 
     return () => {
       cancelled = true;
+      clearReadyWatchdog();
       // Finalize and flush any remaining watch time before tearing down.
       onStop();
       stopTimers();

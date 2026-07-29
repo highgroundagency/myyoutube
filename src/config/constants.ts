@@ -70,6 +70,13 @@ export const HEARTBEAT_MS = 5000;
 /** Flush accumulated watch seconds to persistence on this cadence. */
 export const FLUSH_INTERVAL_MS = 20000;
 
+/**
+ * If the player never reports onReady within this window, show the recoverable
+ * error UI instead of an endless spinner. A content blocker can load the API
+ * script yet still block the embed itself, and iOS gives no event for that.
+ */
+export const PLAYER_READY_TIMEOUT_MS = 20000;
+
 // ----- Region (section 9.5) -------------------------------------------------
 
 /**
