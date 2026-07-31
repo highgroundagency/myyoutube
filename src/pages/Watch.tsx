@@ -363,6 +363,13 @@ function PlayerArea({
             >
               Try again
             </button>
+            {/* Plain <a>: a fresh full load, outside any stuck player state. */}
+            <a
+              href="/diagnostico"
+              className="rounded-lg border border-white/30 px-4 py-2 text-sm font-medium hover:bg-white/10"
+            >
+              Diagnóstico
+            </a>
             <button
               type="button"
               onClick={onMarkSeenAndBack}

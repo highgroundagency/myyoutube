@@ -108,6 +108,14 @@ function devApiPlugin(mode: string): Plugin {
 //  - NetworkFirst for /api so live and feed data never get stuck stale
 //  - autoUpdate so users are never trapped on an old cached version
 export default defineConfig(({ mode }) => ({
+  // Build stamp shown on the /diagnostico page, so a screenshot tells us
+  // exactly which deploy a device is actually running.
+  define: {
+    __BUILD_STAMP__: JSON.stringify(new Date().toISOString()),
+    __BUILD_COMMIT__: JSON.stringify(
+      (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7),
+    ),
+  },
   plugins: [
     react(),
     devApiPlugin(mode),

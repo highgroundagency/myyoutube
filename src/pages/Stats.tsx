@@ -144,6 +144,12 @@ export function Stats() {
       </section>
 
       <SyncStatusLine />
+      <p className="mt-2 text-xs text-fg-muted">
+        Vídeos não tocam neste aparelho?{' '}
+        <a href="/diagnostico" className="text-accent-600 underline-offset-2 hover:underline">
+          Rodar diagnóstico
+        </a>
+      </p>
     </div>
   );
 }
