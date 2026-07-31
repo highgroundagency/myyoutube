@@ -47,7 +47,7 @@ function playerErrorMessage(code: number | null): string {
     case -1:
       return 'Não consegui carregar o player do YouTube. Se você usa bloqueador de anúncios/conteúdo no Safari, VPN, Private Relay ou Modo Restrito, desative pra este site e toque em "Tentar de novo".';
     case -2:
-      return 'O player carregou mas não iniciou. Costuma ser bloqueador de conteúdo, Modo de Baixo Consumo ou conexão instável. Toque em "Tentar de novo" ou abra no YouTube.';
+      return 'Tentei os dois caminhos do player (normal e alternativo) e nenhum iniciou. Um bloqueador (Opal/ClearSpace/Tempo de Uso) deve estar barrando o site do YouTube neste aparelho. Roda o Diagnóstico abaixo pra confirmar.';
     case 2:
       return 'This video link looks invalid.';
     case 5:

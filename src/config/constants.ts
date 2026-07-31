@@ -22,6 +22,14 @@ export const ACCENT_HEX = '#f2555a';
 /** Default embed host if VITE_EMBED_HOST is not set. Premium friendly. */
 export const DEFAULT_EMBED_HOST = 'https://www.youtube.com';
 
+/**
+ * YouTube's official alternate embed domain. Screen-time blockers (Opal,
+ * ClearSpace) usually block youtube.com PAGES but not this domain, so the
+ * player fails over to it automatically when the default host never becomes
+ * ready (see src/lib/player/embedHost.ts).
+ */
+export const FALLBACK_EMBED_HOST = 'https://www.youtube-nocookie.com';
+
 // ----- Filtering thresholds (section 9) -------------------------------------
 
 /**
@@ -71,11 +79,13 @@ export const HEARTBEAT_MS = 5000;
 export const FLUSH_INTERVAL_MS = 20000;
 
 /**
- * If the player never reports onReady within this window, show the recoverable
- * error UI instead of an endless spinner. A content blocker can load the API
- * script yet still block the embed itself, and iOS gives no event for that.
+ * If the player never reports onReady within this window, fail over to the
+ * alternate embed host (then show the recoverable error UI). A content blocker
+ * can load the API script yet still block the embed, with no event at all.
+ * Kept short because a healthy embed reports ready in a few seconds and the
+ * worst case is paid twice (once per host).
  */
-export const PLAYER_READY_TIMEOUT_MS = 20000;
+export const PLAYER_READY_TIMEOUT_MS = 12000;
 
 // ----- Region (section 9.5) -------------------------------------------------
 

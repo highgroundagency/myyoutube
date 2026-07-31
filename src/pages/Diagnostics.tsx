@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadYouTubeIframeAPI, type YTPlayer } from '../lib/player/iframeLoader';
+import { rememberWorkingEmbedHost } from '../lib/player/embedHost';
+import { DEFAULT_EMBED_HOST, FALLBACK_EMBED_HOST } from '../config/constants';
 
 /**
  * On-device playback diagnostics (/diagnostico). The owner cannot open a
@@ -14,8 +16,8 @@ import { loadYouTubeIframeAPI, type YTPlayer } from '../lib/player/iframeLoader'
 const TEST_VIDEO_ID = 'M7lc1UVf-VE';
 const STEP_TIMEOUT_MS = 15_000;
 
-type StepKey = 'server' | 'script' | 'image' | 'embed';
-type StepStatus = 'pending' | 'running' | 'pass' | 'fail';
+type StepKey = 'server' | 'script' | 'image' | 'embed' | 'embedAlt';
+type StepStatus = 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
 type StepResult = { status: StepStatus; detail?: string };
 type Results = Record<StepKey, StepResult>;
 
@@ -23,7 +25,8 @@ const STEP_LABEL: Record<StepKey, string> = {
   server: 'Servidor do app (Vercel)',
   script: 'Script do player (www.youtube.com)',
   image: 'Imagens do YouTube (i.ytimg.com)',
-  embed: 'Player de verdade (embed)',
+  embed: 'Player padrão (youtube.com)',
+  embedAlt: 'Player alternativo (youtube-nocookie.com)',
 };
 
 const initialResults = (): Results => ({
@@ -31,6 +34,7 @@ const initialResults = (): Results => ({
   script: { status: 'pending' },
   image: { status: 'pending' },
   embed: { status: 'pending' },
+  embedAlt: { status: 'pending' },
 });
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -130,23 +134,21 @@ export function Diagnostics() {
       setStep('script', { status: 'fail', detail: (e as Error).message });
     }
 
-    // 4. A real (hidden, muted, no-autoplay) embed reaching onReady.
-    if (!scriptOk) {
-      setStep('embed', { status: 'fail', detail: 'pulado: o script não carregou' });
-    } else {
-      setStep('embed', { status: 'running' });
+    // A real (hidden, no-autoplay) embed reaching onReady, on a given host.
+    const probeEmbed = async (embedHostUrl: string): Promise<{ ok: boolean; detail: string }> => {
       let player: YTPlayer | null = null;
       try {
         const YT = await loadYouTubeIframeAPI();
-        const host = embedHostRef.current;
-        if (!host) throw new Error('container do teste não existe');
-        host.innerHTML = '';
+        const mount = embedHostRef.current;
+        if (!mount) throw new Error('container do teste não existe');
+        mount.innerHTML = '';
         const target = document.createElement('div');
-        host.appendChild(target);
+        mount.appendChild(target);
         await withTimeout(
           new Promise<void>((resolve, reject) => {
             player = new YT.Player(target, {
               videoId: TEST_VIDEO_ID,
+              host: embedHostUrl,
               width: 32,
               height: 18,
               playerVars: { playsinline: 1, autoplay: 0, origin: window.location.origin },
@@ -159,11 +161,9 @@ export function Diagnostics() {
           STEP_TIMEOUT_MS,
           'embed',
         );
-        if (!isCurrent()) return;
-        setStep('embed', { status: 'pass', detail: 'o player inicializa neste aparelho' });
+        return { ok: true, detail: 'o player inicializa neste aparelho' };
       } catch (e) {
-        if (!isCurrent()) return;
-        setStep('embed', { status: 'fail', detail: (e as Error).message });
+        return { ok: false, detail: (e as Error).message };
       } finally {
         try {
           // TS cannot see the assignment inside the Promise executor.
@@ -172,6 +172,29 @@ export function Diagnostics() {
           // teardown race: ignore
         }
         if (embedHostRef.current) embedHostRef.current.innerHTML = '';
+      }
+    };
+
+    // 4. Default host, then 5. the alternate host only when the default fails.
+    if (!scriptOk) {
+      setStep('embed', { status: 'fail', detail: 'pulado: o script não carregou' });
+      setStep('embedAlt', { status: 'fail', detail: 'pulado: o script não carregou' });
+    } else {
+      setStep('embed', { status: 'running' });
+      const primary = await probeEmbed(DEFAULT_EMBED_HOST);
+      if (!isCurrent()) return;
+      setStep('embed', { status: primary.ok ? 'pass' : 'fail', detail: primary.detail });
+
+      if (primary.ok) {
+        rememberWorkingEmbedHost(DEFAULT_EMBED_HOST);
+        setStep('embedAlt', { status: 'skipped', detail: 'não precisou: o padrão funciona' });
+      } else {
+        setStep('embedAlt', { status: 'running' });
+        const alt = await probeEmbed(FALLBACK_EMBED_HOST);
+        if (!isCurrent()) return;
+        setStep('embedAlt', { status: alt.ok ? 'pass' : 'fail', detail: alt.detail });
+        // Heal on the spot: the app player now starts from the working host.
+        if (alt.ok) rememberWorkingEmbedHost(FALLBACK_EMBED_HOST);
       }
     }
 
@@ -226,7 +249,11 @@ export function Diagnostics() {
   }, []);
 
   const failed = (Object.keys(results) as StepKey[]).filter((k) => results[k].status === 'fail');
-  const done = !running && (Object.keys(results) as StepKey[]).every((k) => results[k].status === 'pass' || results[k].status === 'fail');
+  const done =
+    !running &&
+    (Object.keys(results) as StepKey[]).every((k) =>
+      ['pass', 'fail', 'skipped'].includes(results[k].status),
+    );
 
   return (
     <div className="mx-auto max-w-xl">
@@ -314,6 +341,13 @@ function StatusDot({ status }: { status: StepStatus }) {
       </svg>
     );
   }
+  if (status === 'skipped') {
+    return (
+      <svg className="shrink-0 text-fg-muted" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="pulado">
+        <path d="M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
   return <span className="h-2 w-2 shrink-0 rounded-full bg-fg-muted/40" />;
 }
 
@@ -324,10 +358,14 @@ function Verdict({ failed }: { failed: StepKey[] }) {
     title = 'Tudo passou neste aparelho ✅';
     body =
       'O YouTube funciona aqui. Se os vídeos ainda não tocam nas páginas do app, quase certamente este aparelho está rodando uma versão velha em cache: toque em "Resetar o app" abaixo e tente um vídeo de novo.';
+  } else if (failed.includes('embed') && !failed.includes('embedAlt') && !failed.includes('script')) {
+    title = 'Bloqueio contornado ✅';
+    body =
+      'O player padrão (youtube.com) está bloqueado pelo seu bloqueador, MAS o caminho alternativo oficial (youtube-nocookie.com) funciona neste aparelho. Já deixei o app configurado pra usar esse caminho aqui: volta pro feed e dá play num vídeo. Se um dia o bloqueador passar a barrar esse domínio também, o diagnóstico vai acusar.';
   } else if (failed.includes('script') || failed.includes('embed')) {
     title = 'O YouTube está sendo bloqueado neste aparelho 🚫';
     body =
-      'O app está de pé, mas este aparelho não consegue falar com o player do YouTube. É exatamente o que um bloqueador faz quando bloqueia o SITE youtube.com (não só o app do YouTube). Confira no Opal e no ClearSpace se "youtube.com" está na lista de sites bloqueados de alguma sessão ativa, e em Ajustes > Tempo de Uso > Restrições de Conteúdo e Privacidade > Conteúdo Web. Bloquear o app do YouTube pode continuar; o site precisa ficar livre pro nosso player funcionar.';
+      'Tentei os dois caminhos oficiais do player (youtube.com e youtube-nocookie.com) e o bloqueador barra ambos. Sem liberar, não existe forma legítima de tocar o vídeo aqui. A boa notícia: dá pra continuar bloqueando o APP do YouTube e liberar só o SITE. Confere no Opal/ClearSpace a lista de sites das sessões ativas e em Ajustes > Tempo de Uso > Restrições de Conteúdo e Privacidade > Conteúdo Web. Alternativas: assistir pelo laptop, ou baixar os vídeos pela aba Baixar e assistir offline.';
   } else if (failed.includes('server')) {
     title = 'Este aparelho não alcançou o servidor do app 📡';
     body = 'Parece problema de conexão (ou VPN/filtro barrando o domínio do app). Testa em outra rede (Wi-Fi vs 4G) e roda de novo.';

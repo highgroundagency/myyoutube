@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { loadYouTubeIframeAPI, type YTPlayer } from './iframeLoader';
-import { EMBED_HOST } from '../../config/env';
+import {
+  getPreferredEmbedHost,
+  rememberWorkingEmbedHost,
+  alternateEmbedHost,
+} from './embedHost';
 import {
   SEEN_THRESHOLD_SECONDS,
   COMPLETION_RATIO,
@@ -57,6 +61,16 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
   const [status, setStatus] = useState<PlayerStatus>('idle');
   const [errorCode, setErrorCode] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Embed host with automatic failover: blockers (Opal/ClearSpace) often kill
+  // youtube.com pages but not youtube-nocookie.com. Start from what last
+  // worked on this device; the watchdog below switches once if it never
+  // becomes ready. attemptedHosts caps it at one try per host per video.
+  const [host, setHost] = useState<string>(getPreferredEmbedHost);
+  const attemptedHostsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    attemptedHostsRef.current = new Set();
+  }, [videoId, reloadKey]);
 
   // Latest callbacks + duration, read by the event handlers without forcing the
   // create effect to re-run (which would tear down and rebuild the player).
@@ -285,6 +299,8 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
       }
     };
 
+    attemptedHostsRef.current.add(host);
+
     loadYouTubeIframeAPI()
       .then((YT) => {
         if (cancelled) return;
@@ -295,7 +311,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
 
         playerRef.current = new YT.Player(target, {
           videoId,
-          host: EMBED_HOST,
+          host,
           width: '100%',
           height: '100%',
           playerVars: {
@@ -314,6 +330,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
               readyFired = true;
               clearReadyWatchdog();
               if (cancelled) return;
+              rememberWorkingEmbedHost(host);
               setStatus('ready');
               setupMediaSession();
               // Following a user click (navigation), ask the player to start.
@@ -355,7 +372,15 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
         readyWatchdog = setTimeout(() => {
           readyWatchdog = null;
           if (cancelled || readyFired) return;
-          console.error('[player] onReady never fired; the embed is likely blocked.');
+          // Silent embed (a blocker eating youtube.com pages): retry once on
+          // the other official host before giving up with the error UI.
+          const alt = alternateEmbedHost(host);
+          if (alt && !attemptedHostsRef.current.has(alt)) {
+            console.warn(`[player] onReady never fired on ${host}; retrying via ${alt}.`);
+            setHost(alt);
+            return;
+          }
+          console.error('[player] onReady never fired on any embed host.');
           setErrorCode(-2);
           setStatus('error');
         }, PLAYER_READY_TIMEOUT_MS);
@@ -386,7 +411,7 @@ export function useYouTubePlayer(args: UseYouTubePlayerArgs): UseYouTubePlayerRe
       // `container` is captured from this effect run, so it is the correct node.
       container.innerHTML = '';
     };
-  }, [videoId, enabled, reloadKey]);
+  }, [videoId, enabled, reloadKey, host]);
 
   return { containerRef, status, errorCode, reload };
 }

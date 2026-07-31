@@ -16,7 +16,12 @@ function readBool(value: string | undefined, fallback: boolean): boolean {
 export const MOCK_MODE = readBool(import.meta.env.VITE_MOCK_MODE, false);
 
 /**
- * Embed host for the IFrame player. Defaults to the Premium friendly youtube.com.
- * Switchable per device via VITE_EMBED_HOST (section 17).
+ * Explicit embed-host override via VITE_EMBED_HOST (section 17). When set it
+ * pins the player host and disables the automatic failover; when null the
+ * player picks between the default and fallback hosts (embedHost.ts).
  */
-export const EMBED_HOST = (import.meta.env.VITE_EMBED_HOST ?? DEFAULT_EMBED_HOST).replace(/\/+$/, '');
+export const EMBED_HOST_OVERRIDE: string | null =
+  (import.meta.env.VITE_EMBED_HOST ?? '').replace(/\/+$/, '') || null;
+
+/** Embed host for the IFrame player when no failover logic is involved. */
+export const EMBED_HOST = EMBED_HOST_OVERRIDE ?? DEFAULT_EMBED_HOST;
